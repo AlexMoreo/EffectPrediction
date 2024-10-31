@@ -1,14 +1,17 @@
 import numpy as np
 import quapy as qp
-from quapy.data import LabelledCollection
+from quapy.data import LabelledCollection, Dataset
 import quapy.functional as F
 from quapy.method.aggregative import PACC, EMQ, CC, KDEyML, PCC
 from quapy.method.non_aggregative import MaximumLikelihoodPrevalenceEstimation
 from quapy.protocol import UPP
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVC
 from tqdm import tqdm
+from classification import BlockEnsembleClassifier
+
 
 from data import load_dataset
 import warnings
@@ -33,6 +36,9 @@ def experiment(i):
     train = LabelledCollection(covariates[~sel], labels[~sel])
     test = LabelledCollection(covariates[sel], labels[sel])
 
+    zscorer = StandardScaler()
+    train.instances = zscorer.fit_transform(train.instances)
+    test.instances = zscorer.transform(test.instances)
 
     qp.environ["SAMPLE_SIZE"] = len(test)
 
@@ -41,8 +47,10 @@ def experiment(i):
 
     mlpe = MaximumLikelihoodPrevalenceEstimation()
     cc = CC(LogisticRegression())
-    pcc = PCC(LogisticRegression())
+    # pcc = PCC(LogisticRegression())
+    pcc = PCC(BlockEnsembleClassifier(LogisticRegression(), column_names=cov_names))
     quant_pps = PACC(LogisticRegression())
+    # quant_pps = PACC(BlockEnsembleClassifier(LogisticRegression(), column_names=cov_names))
 
     # train, val = train.split_stratified(train_prop=0.6, random_state=0)
     # quant = qp.model_selection.GridSearchQ(
@@ -68,11 +76,10 @@ def experiment(i):
     return err_noshift, err_cc, err_pcc, err_quant
 
 
-
-
-covariates, labels, subreddits_names, subreddits = qp.util.pickled_resource(path + '.pkl', load_dataset, path)
+cov_names, covariates, labels, subreddits_names, subreddits = qp.util.pickled_resource(path + '.pkl', load_dataset, path)
 
 n_subreddits = len(subreddits_names)
+print(cov_names)
 
 results = qp.util.parallel(experiment, np.arange(n_subreddits), n_jobs=-1, asarray=False, backend='loky')
 
@@ -87,3 +94,27 @@ print(f'MLPE = {np.mean(mlpe_errors):.4f}+-{np.std(mlpe_errors):.4f}')
 print(f'CC = {np.mean(cc_errors):.4f}+-{np.std(cc_errors):.4f}')
 print(f'PCC = {np.mean(pcc_errors):.4f}+-{np.std(pcc_errors):.4f}')
 print(f'Quant = {np.mean(q_errors):.4f}+-{np.std(q_errors):.4f}')
+
+
+"""
+activity:
+MLPE = 0.0736+-0.0207
+CC = 0.1214+-0.0353
+PCC = 0.0415+-0.0235 <- with LR
+PCC = 0.0403+-0.0240 <- with blocks of LR
+Quant = 0.3297+-0.0616
+
+toxicity:
+MLPE = 0.0461+-0.0253
+CC = 0.1361+-0.0409
+PCC = 0.0335+-0.0259 <- with LR
+PCC = 0.0330+-0.0255 <- with blocks of LR
+Quant = 0.3016+-0.0915
+
+diversity:
+MLPE = 0.0629+-0.0298
+CC = 0.1374+-0.0371
+PCC = 0.0595+-0.0226 <- with LR
+PCC = 0.0576+-0.0266 <- with blocks of LR
+Quant = 0.3528+-0.0967
+"""

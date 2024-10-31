@@ -11,7 +11,7 @@ from data import load_dataset
 
 path = '../datasets/toxicity_dataset'
 
-covariates, labels, subreddits_names, subreddits = qp.util.pickled_resource(path + '.pkl', load_dataset, path)
+cov_names, covariates, labels, subreddits_names, subreddits = qp.util.pickled_resource(path + '.pkl', load_dataset, path)
 
 # n_subreddits = subreddits.shape[1]
 # for subbreddit_id in range(n_subreddits):
