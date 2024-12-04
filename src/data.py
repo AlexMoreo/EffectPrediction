@@ -1,10 +1,15 @@
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler
+import os
 
 
 
 def load_dataset(path, with_periods=False, return_period=0):
+    if not os.path.exists(path):
+        print(f'file {path} not found!')
+        raise ValueError()
+
     df = pd.read_json(path)
 
     subbreddits_names = [

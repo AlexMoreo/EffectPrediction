@@ -51,3 +51,35 @@ class BlockEnsembleClassifier(BaseEstimator):
         blocks = self.separate_blocks(X)
         P = self.first_tier_predict_proba(blocks)
         return self.meta.predict_proba(P)
+
+
+if __name__ == '__main__':
+    from data import load_dataset
+    from sklearn.model_selection import cross_val_score
+    import warnings
+    warnings.filterwarnings("ignore", category=UserWarning, module='sklearn')
+
+    
+    for path in [
+        './datasets/datasets_periods/activity_dataset',
+        './datasets/datasets_periods/toxicity_dataset',
+        './datasets/datasets_periods/diversity_dataset'
+    ]:
+
+        lr_scores, block_scores = [], []
+        for period in range(7):
+            print('testing for period', period)
+            cov_names, covariates, labels, subreddits_names, subreddits = load_dataset(path, with_periods=True, return_period=period)
+
+            cls = LogisticRegression()
+            lr_score = cross_val_score(cls, covariates, labels, n_jobs=-1, scoring='accuracy')
+            lr_scores.append(np.mean(lr_score))
+
+            cls = BlockEnsembleClassifier(cls, cov_names)
+            block_score = cross_val_score(cls, covariates, labels, n_jobs=-1, scoring='accuracy')
+            block_scores.append(np.mean(block_score))
+
+        print(path)
+        print(f'LR score = {np.mean(lr_scores):.4f}')
+        print(f'Block score = {np.mean(block_scores):.4f}')
+
