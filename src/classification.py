@@ -1,4 +1,5 @@
 from sklearn.base import BaseEstimator
+from sklearn.exceptions import ConvergenceWarning
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 import pandas as pd
@@ -6,17 +7,20 @@ import numpy as np
 from sklearn import clone
 
 
+def separate_blocks_idx(column_names):
+    column_prefixes = [n.split('_')[0] for n in column_names]
+    column_prefixes_unique = sorted(np.unique(column_prefixes))
+    prefix_idx = {prefix: np.char.startswith(column_prefixes, prefix) for prefix in column_prefixes_unique}
+    return column_prefixes_unique, prefix_idx
+
+
+
+
 class BlockEnsembleClassifier(BaseEstimator):
 
     def __init__(self, base_estimator, column_names):
         self.base_estimator = base_estimator
         self.column_names = column_names
-
-    def separate_blocks_idx(self, column_names):
-        column_prefixes = [n.split('_')[0] for n in column_names]
-        self.column_prefixes = sorted(np.unique(column_prefixes))
-        self.prefix_idx = {prefix: np.char.startswith(column_prefixes, prefix) for prefix in self.column_prefixes}
-        return self.prefix_idx
 
     def separate_blocks(self, X):
         blocks = {prefix: X[:,index] for prefix, index in self.prefix_idx.items()}
@@ -31,7 +35,7 @@ class BlockEnsembleClassifier(BaseEstimator):
         return P
 
     def fit(self, X, y):
-        self.separate_blocks_idx(self.column_names)
+        self.column_prefixes, self.prefix_idx = separate_blocks_idx(self.column_names)
         blocks = self.separate_blocks(X)
         self.learners = {
             prefix: clone(self.base_estimator).fit(block, y) for prefix, block in blocks.items()
@@ -58,12 +62,13 @@ if __name__ == '__main__':
     from sklearn.model_selection import cross_val_score
     import warnings
     warnings.filterwarnings("ignore", category=UserWarning, module='sklearn')
+    warnings.filterwarnings("ignore", category=ConvergenceWarning, module='sklearn')
 
     
     for path in [
-        './datasets/datasets_periods/activity_dataset',
-        './datasets/datasets_periods/toxicity_dataset',
-        './datasets/datasets_periods/diversity_dataset'
+        '../datasets/datasets_periods/activity_dataset',
+        '../datasets/datasets_periods/toxicity_dataset',
+        '../datasets/datasets_periods/diversity_dataset'
     ]:
 
         lr_scores, block_scores = [], []
