@@ -1,41 +1,41 @@
+from typing import OrderedDict
+
 from sklearn.base import BaseEstimator
 from sklearn.exceptions import ConvergenceWarning
 from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
-import pandas as pd
 import numpy as np
 from sklearn import clone
 
 
-def separate_blocks_idx(column_names):
-    column_prefixes = [n.split('_')[0] for n in column_names]
-    column_prefixes_unique = sorted(np.unique(column_prefixes))
-    prefix_idx = {prefix: np.char.startswith(column_prefixes, prefix) for prefix in column_prefixes_unique}
-    return column_prefixes_unique, prefix_idx
-
-
-
 
 class BlockEnsembleClassifier(BaseEstimator):
+    """
+    An ensemble that trains a 1st tier of feature-block-specific classifiers, that
+    takes a final decision based on a meta-classifier that is trained on the outputs
+    of the 1st tier.
 
-    def __init__(self, base_estimator, column_names):
+    :param base_estimator: the estimators to use in the 1st tier and meta classifier
+    :param blocks_ids: a dictionary in which the keys are the feature-block prefix
+        and the values are the column indices of the corresponding features
+    """
+
+    def __init__(self, base_estimator: BaseEstimator, blocks_ids: OrderedDict):
         self.base_estimator = base_estimator
-        self.column_names = column_names
+        self.blocks_ids = blocks_ids
 
     def separate_blocks(self, X):
-        blocks = {prefix: X[:,index] for prefix, index in self.prefix_idx.items()}
+        blocks = {prefix: X[:,index] for prefix, index in self.blocks_ids.items()}
         return blocks
 
     def first_tier_predict_proba(self, blocks):
         Ps = []
-        for prefix in self.column_prefixes:
+        for prefix in self.blocks_ids.keys():
             X = blocks[prefix]
             Ps.append(self.learners[prefix].predict_proba(X))
         P = np.hstack(Ps)
         return P
 
     def fit(self, X, y):
-        self.column_prefixes, self.prefix_idx = separate_blocks_idx(self.column_names)
         blocks = self.separate_blocks(X)
         self.learners = {
             prefix: clone(self.base_estimator).fit(block, y) for prefix, block in blocks.items()

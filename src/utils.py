@@ -1,7 +1,7 @@
 from sklearn import metrics
 from sklearn.exceptions import ConvergenceWarning
 from tqdm import tqdm
-
+import numpy as np
 
 # implementations from: https://github.com/jindongwang/transferlearning/blob/master/code/distance/mmd_numpy_sklearn.py
 
@@ -61,6 +61,7 @@ def mmd_rbf_blocks(X, Y, blocks_idx, gammas=1.):
 
     return mmd
 
+
 def mmd_rbf_blocks_matrix(X, Y, blocks_idx, gammas=1.):
     if isinstance(gammas, float):
         gammas = [gammas]*len(blocks_idx)
@@ -74,6 +75,16 @@ def mmd_rbf_blocks_matrix(X, Y, blocks_idx, gammas=1.):
             M += M_block
 
     return M
+
+def mmd_pairwise_rbf_blocks(Xs, blocks_idx, gammas=1.):
+    n = len(Xs)
+    mmd_matrix = np.zeros(shape=(n, n))
+    for i in range(n-1):
+        for j in range(i+1, n):
+            mmd = mmd_rbf_blocks(Xs[i], Xs[j], blocks_idx, gammas)
+            mmd_matrix[i, j] = mmd
+            mmd_matrix[j, i] = mmd
+    return mmd_matrix
 
 
 def mmd_rbf_blocks_pval(X, Y, blocks_idx, gammas=1., trials=1000):
