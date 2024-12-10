@@ -38,7 +38,7 @@ SUBREDDIT_NAMES = [
     ]
 
 
-def load_dataset(path, n_classes):
+def load_dataset(path, n_classes, filter_out_multiple_subreddits=False):
 
     # asserts
     if n_classes not in [3, 5]:
@@ -49,6 +49,9 @@ def load_dataset(path, n_classes):
 
     # load dataframe
     df = pd.read_json(path)
+
+    if filter_out_multiple_subreddits:
+        df = df[df[SUBREDDIT_NAMES].sum(axis=1) == 1]
 
     if 'index' in df.columns:
         # unused, and only present in some datasets
@@ -64,6 +67,7 @@ def load_dataset(path, n_classes):
         f'unknown threshold for dataset in path {path}'
 
     # make threshold_values symmetric and bounded by inf; e.g., [0.2, 0.55] -> [-inf, -0.55, -0.2, 0.2, 0.55, inf]
+    threshold_values = sorted(threshold_values)
     threshold_values = [-np.inf] + [-t for t in threshold_values[::-1]] + threshold_values + [np.inf]
     new_labels = np.arange(len(threshold_values)-1)
 

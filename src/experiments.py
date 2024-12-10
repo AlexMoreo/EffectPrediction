@@ -39,6 +39,7 @@ def experiment(data, n_classes, method, policy):
     # are the indexes of the periods (currently 7)
     periods = np.arange(n_periods+1)-1
     for period in periods:
+        if period==-1: continue
         period = int(period)
         print(f'\trunning {period=}')
 
@@ -94,13 +95,13 @@ def main(data, n_classes):
 
 
 if __name__ == '__main__':
-    results_dir = '../results'
+    results_dir = '../results_filtered'
     dataset_dir = '../datasets'
 
     n_classes_list = [3, 5]
-    dataset_names = ['activity', 'diversity', 'toxicity']
+    dataset_names = ['diversity', 'activity', 'toxicity']
     for dataset_name, n_classes in product(dataset_names, n_classes_list):
         print(f'running {dataset_name=} {n_classes}')
-        data = load_dataset(join(dataset_dir, f'{dataset_name}_dataset'), n_classes=n_classes)
+        data = load_dataset(join(dataset_dir, f'{dataset_name}_dataset'), n_classes=n_classes, filter_out_multiple_subreddits=True)
         os.makedirs(join(results_dir, f'{n_classes}_classes', dataset_name), exist_ok=True)
         main(data, n_classes)

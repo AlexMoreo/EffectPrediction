@@ -10,9 +10,9 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVC
 from tqdm import tqdm
-from classification import BlockEnsembleClassifier, separate_blocks_idx
+from classification import BlockEnsembleClassifier
 
-from data import load_dataset
+from _depr.derp_data import load_dataset
 import warnings
 
 from utils import mmd_rbf_blocks
@@ -21,7 +21,7 @@ warnings.filterwarnings("ignore", category=UserWarning, module='sklearn')
 
 # path = '../datasets/datasets_periods/activity_dataset'
 # path = '../datasets/datasets_periods/toxicity_dataset'
-path = '../datasets/datasets_periods/diversity_dataset'
+path = '../datasets/depr_/datasets_periods/diversity_dataset'
 
 
 def fit_and_test(quantifier, train, test, error_fn):
@@ -51,7 +51,7 @@ def experiment(i):
     mlpe = MaximumLikelihoodPrevalenceEstimation()
     cc = CC(LogisticRegression())
     # pcc = PCC(LogisticRegression())
-    pcc = PCC(BlockEnsembleClassifier(LogisticRegression(), column_names=cov_names))
+    # pcc = PCC(BlockEnsembleClassifier(LogisticRegression(), column_names=cov_names))
     # quant_pps = PACC(LogisticRegression())
     # quant_pps = PACC(BlockEnsembleClassifier(LogisticRegression(), column_names=cov_names))
 
@@ -63,27 +63,29 @@ def experiment(i):
         covs_sel = zscorer.transform(covs_sel)
         trains.append(LabelledCollection(covs_sel, labels[sel], classes=classes))
 
-    mmds = []
-    for train_j in trains:
-        mmd = mmd_rbf_blocks(train_j.X, test.X, blocks_idx, gammas=1.)
-        mmds.append(mmd)
+    # mmds = []
+    # for train_j in trains:
+    #     mmd = mmd_rbf_blocks(train_j.X, test.X, blocks_idx, gammas=1.)
+    #     mmds.append(mmd)
 
     # choose only the best
     # min_mmd_idx = np.argmin(mmds)
     # train_sel = trains[min_mmd_idx]
 
     # choose all below the median mmd
-    median_mmd = np.median(mmds)
-    sel_trains = [train_j for mmd_j, train_j in zip(mmds,trains) if mmd_j < median_mmd]
-    train_sel = LabelledCollection.join(*sel_trains)
+    # median_mmd = np.median(mmds)
+    # sel_trains = [train_j for mmd_j, train_j in zip(mmds,trains) if mmd_j < median_mmd]
+    # train_sel = LabelledCollection.join(*sel_trains)
 
-    pcc_mmd = PCC(BlockEnsembleClassifier(LogisticRegression(), column_names=cov_names))
+    # pcc_mmd = PCC(BlockEnsembleClassifier(LogisticRegression(), column_names=cov_names))
 
     err_noshift, _ = fit_and_test(mlpe, train, test, error_fn=qp.error.ae)
     err_cc=-1
     # err_cc, _ = fit_and_test(cc, train, test, error_fn=qp.error.ae)
-    err_pcc, pcc_prev_hat = fit_and_test(pcc, train, test, error_fn=qp.error.ae)
-    err_pcc_sel, pcc_prev_hat_sel = fit_and_test(pcc_mmd, train_sel, test, error_fn=qp.error.ae)
+    # err_pcc, pcc_prev_hat = fit_and_test(pcc, train, test, error_fn=qp.error.ae)
+    err_pcc=-1
+    # err_pcc_sel, pcc_prev_hat_sel = fit_and_test(pcc_mmd, train_sel, test, error_fn=qp.error.ae)
+    err_pcc_sel=-1
     # err_quant, quant_prev_hat = fit_and_test(quant_pps, train, test, error_fn=qp.error.ae)
 
     # print(f"test-prevalence=\t{F.strprev(test.prevalence())}")
@@ -98,8 +100,8 @@ def experiment(i):
 for period in range(7):
     cov_names, covariates, labels, subreddits_names, subreddits = load_dataset(path, with_periods=True, return_period=period)
 
-    column_prefixes, prefix_idx = separate_blocks_idx(cov_names)
-    blocks_idx = prefix_idx.values()
+    # column_prefixes, prefix_idx = separate_blocks_idx(cov_names)
+    # blocks_idx = prefix_idx.values()
 
     n_subreddits = len(subreddits_names)
 
