@@ -99,7 +99,7 @@ if __name__ == '__main__':
     dataset_dir = '../datasets'
 
     n_classes_list = [3, 5]
-    dataset_names = ['diversity', 'activity', 'toxicity']
+    dataset_names = ['diversity', 'toxicity', 'activity']
     for dataset_name, n_classes in product(dataset_names, n_classes_list):
         print(f'running {dataset_name=} {n_classes}')
         data = load_dataset(join(dataset_dir, f'{dataset_name}_dataset'), n_classes=n_classes, filter_out_multiple_subreddits=True)

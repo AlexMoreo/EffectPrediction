@@ -1,11 +1,11 @@
 from typing import OrderedDict
-
+from sklearn.model_selection import cross_val_predict
 from sklearn.base import BaseEstimator
 from sklearn.exceptions import ConvergenceWarning
 from sklearn.linear_model import LogisticRegression
 import numpy as np
 from sklearn import clone
-
+import quapy.functional as F
 
 
 class BlockEnsembleClassifier(BaseEstimator):
@@ -19,9 +19,10 @@ class BlockEnsembleClassifier(BaseEstimator):
         and the values are the column indices of the corresponding features
     """
 
-    def __init__(self, base_estimator: BaseEstimator, blocks_ids: OrderedDict):
+    def __init__(self, base_estimator: BaseEstimator, blocks_ids: OrderedDict, kfcv=0):
         self.base_estimator = base_estimator
         self.blocks_ids = blocks_ids
+        self.kfcv = kfcv
 
     def separate_blocks(self, X):
         blocks = {prefix: X[:,index] for prefix, index in self.blocks_ids.items()}
@@ -37,10 +38,23 @@ class BlockEnsembleClassifier(BaseEstimator):
 
     def fit(self, X, y):
         blocks = self.separate_blocks(X)
-        self.learners = {
-            prefix: clone(self.base_estimator).fit(block, y) for prefix, block in blocks.items()
-        }
-        P = self.first_tier_predict_proba(blocks)
+        train_counts = F.counts_from_labels(y, classes=np.unique(y))
+        if self.kfcv==0 or any(train_counts < self.kfcv):
+            self.learners = {
+                prefix: clone(self.base_estimator).fit(block, y) for prefix, block in blocks.items()
+            }
+            P = self.first_tier_predict_proba(blocks)
+        else:
+            self.learners = {}
+            Ps = []
+            for prefix, block in blocks.items():
+                learner_block = clone(self.base_estimator)
+                block_P = cross_val_predict(learner_block, block, y, cv=self.kfcv, n_jobs=self.kfcv, method='predict_proba')
+                Ps.append(block_P)
+                learner_block.fit(block, y)
+                self.learners[prefix] = learner_block
+            P = np.hstack(Ps)
+
         self.meta = clone(self.base_estimator)
         self.meta.fit(P, y)
         self.classes_ = self.meta.classes_
@@ -59,7 +73,7 @@ class BlockEnsembleClassifier(BaseEstimator):
 
 if __name__ == '__main__':
     from data import load_dataset
-    from sklearn.model_selection import cross_val_score
+    from sklearn.model_selection import cross_val_score, cross_val_predict
     import warnings
     warnings.filterwarnings("ignore", category=UserWarning, module='sklearn')
     warnings.filterwarnings("ignore", category=ConvergenceWarning, module='sklearn')

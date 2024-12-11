@@ -1,4 +1,4 @@
-from submodule.result_table.src.table import Table
+# from submodule.result_table.src.table import Table
 from itertools import product
 from glob import glob
 from os.path import join
@@ -6,7 +6,7 @@ import pickle
 from pathlib import Path
 import pandas as pd
 
-result_dir = '../results'
+result_dir = '../results_filtered'
 datasets = ['activity', 'diversity', 'toxicity']
 # datasets = ['diversity']
 n_classes_list = ['3_classes', '5_classes']
@@ -18,7 +18,7 @@ pd.set_option("display.width", 1000)
 if __name__ == '__main__':
     final_df = []
     for dataset, n_classes in product(datasets, n_classes_list):
-        table = Table()
+        # table = Table()
 
         path = join(result_dir, n_classes, dataset, '*.pkl')
         for method_file in glob(path):
@@ -39,4 +39,6 @@ if __name__ == '__main__':
         columns='period',
         aggfunc='mean',
     )
+    mean_values = pv.mean(axis=1)
+    pv['Mean'] = mean_values
     print(pv)

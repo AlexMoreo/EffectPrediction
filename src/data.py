@@ -38,7 +38,7 @@ SUBREDDIT_NAMES = [
     ]
 
 
-def load_dataset(path, n_classes, filter_out_multiple_subreddits=False):
+def load_dataset(path, n_classes, filter_out_multiple_subreddits=False, filter_abandoned_activity=True):
 
     # asserts
     if n_classes not in [3, 5]:
@@ -52,6 +52,9 @@ def load_dataset(path, n_classes, filter_out_multiple_subreddits=False):
 
     if filter_out_multiple_subreddits:
         df = df[df[SUBREDDIT_NAMES].sum(axis=1) == 1]
+
+    if 'activity' in path and filter_abandoned_activity:
+        df = df[df['label'] != -1]
 
     if 'index' in df.columns:
         # unused, and only present in some datasets
@@ -89,6 +92,7 @@ def load_dataset(path, n_classes, filter_out_multiple_subreddits=False):
     covariates = df.iloc[:,:n_covariates].values
     covariate_names = df.columns.values[:n_covariates]
 
+    assert all(df.columns.values[-n_subreddits:] == SUBREDDIT_NAMES), 'unexpected subreddit names'
     subreddits = df.values[:, -n_subreddits:].astype(bool).T
 
     # get the feature blocks ids and prefixes

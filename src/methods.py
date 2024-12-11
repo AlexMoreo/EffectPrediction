@@ -6,7 +6,10 @@ from quapy.data import LabelledCollection
 from quapy.method.base import BaseQuantifier
 from quapy.method.non_aggregative import MaximumLikelihoodPrevalenceEstimation as MLPE
 from quapy.method.aggregative import CC, PCC, PACC, EMQ, KDEyML
+from quapy.method.meta import Ensemble
 import warnings
+
+from sklearn.linear_model import LogisticRegression
 
 from classification import BlockEnsembleClassifier
 from utils import mmd_pairwise_rbf_blocks
@@ -51,6 +54,29 @@ class SelectAndQuantify(BaseQuantifier):
         return self.base_quantifier.quantify(instances)
 
 
+class EnsembleQuantifier(BaseQuantifier):
+    def __init__(self, base_quantifier):
+        self.ensemble = []
+        self.base_quantifier = base_quantifier
+
+    def fit(self, data_list: List[LabelledCollection], select: List[bool]):
+        sel_data = [data for sel, data in zip(select, data_list)]
+        for data in sel_data:
+            if np.prod(data.counts())>0: # discard datasets with empty classes
+                q = deepcopy(self.base_quantifier)
+                try:
+                    q.fit(data)
+                    self.ensemble.append(q)
+                except Exception as e:
+                    print(f'skipping one member due to: {e}')
+        return self
+
+    def quantify(self, instances):
+        predictions = [q.quantify(instances) for q in self.ensemble]
+        predictions = np.vstack(predictions)
+        return predictions.mean(axis=0)
+
+
 class SelectionPolicy(ABC):
     def feed(self, Xs:List[np.ndarray], **kwargs):
         self.Xs = Xs
@@ -79,30 +105,19 @@ class SelectMedianMMDPolicy(SelectionPolicy):
         return [v < median_val for v in mmds_wrt_test]
 
 
-# class SelectTrainQuantifier(BaseQuantifier):
-#     """
-#     A simple method that simply concatenates all the training sets into a unique
-#     training set, and then trains a surrogate quantifier on it
-#     """
-#
-#     def __init__(self, base_quantifier):
-#         self.base_quantifier = base_quantifier
-#
-#     def fit(self, data_list:List[LabelledCollection], mmd_values: np.ndarray):
-#         mmd_med = np.median(mmd_values)
-#         selected = [data for mmd, data in zip(mmd_values, data_list) if mmd < mmd_med]
-#         training = join_subreddits(*selected)
-#         self.base_quantifier.fit(training)
-#         return self
-#
-#     def quantify(self, instances):
-#         return self.base_quantifier.quantify(instances)
 
 
 def methods(base_classifier, prefix_idx):
     yield 'MLPE', SelectAndQuantify(MLPE()), SelectAllPolicy()
     yield 'CC', SelectAndQuantify(CC(deepcopy(base_classifier))), SelectAllPolicy()
     yield 'PCC', SelectAndQuantify(PCC(deepcopy(base_classifier))), SelectAllPolicy()
-    yield 'bPCC', SelectAndQuantify(PCC(BlockEnsembleClassifier(deepcopy(base_classifier), prefix_idx))), SelectAllPolicy()
+    # yield 'bPCC', SelectAndQuantify(PCC(BlockEnsembleClassifier(deepcopy(base_classifier), prefix_idx))), SelectAllPolicy()
+    yield 'bPCC-cv', SelectAndQuantify(PCC(BlockEnsembleClassifier(deepcopy(base_classifier), prefix_idx, kfcv=5))), SelectAllPolicy()
     yield 'PACC', SelectAndQuantify(PACC(deepcopy(base_classifier))), SelectAllPolicy()
-    yield 'bPCC-sel', SelectAndQuantify(PCC(BlockEnsembleClassifier(deepcopy(base_classifier), prefix_idx))), SelectMedianMMDPolicy()
+    yield 'EPCC', EnsembleQuantifier(PCC(deepcopy(base_classifier))), SelectAllPolicy()
+    yield 'EbPCC-cv', EnsembleQuantifier(PCC(BlockEnsembleClassifier(deepcopy(base_classifier), prefix_idx, kfcv=5))), SelectAllPolicy()
+    yield 'EbPCC-cv-sel', EnsembleQuantifier(PCC(BlockEnsembleClassifier(deepcopy(base_classifier), prefix_idx, kfcv=5))), SelectMedianMMDPolicy()
+    # yield 'bPCC-sel', SelectAndQuantify(PCC(BlockEnsembleClassifier(deepcopy(base_classifier), prefix_idx))), SelectMedianMMDPolicy()
+    # yield 'bPCC-cv-sel', SelectAndQuantify(PCC(BlockEnsembleClassifier(deepcopy(base_classifier), prefix_idx, kfcv=5))), SelectMedianMMDPolicy()
+
+    from quapy.method.meta import MedianEstimator
