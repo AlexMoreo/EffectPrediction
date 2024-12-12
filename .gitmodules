@@ -1,0 +1,3 @@
+[submodule "submodules/result_table"]
+	path = submodules/result_table
+	url = https://gitea-s2i2s.isti.cnr.it/moreo/result_table.git

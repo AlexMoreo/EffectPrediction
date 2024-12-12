@@ -95,7 +95,7 @@ def main(data, n_classes):
 
 
 if __name__ == '__main__':
-    results_dir = '../results_filtered'
+    results_dir = '../results_global'
     dataset_dir = '../datasets'
 
     n_classes_list = [3, 5]
