@@ -102,6 +102,8 @@ def new_experiment(data, n_classes, target, method):
 
     results = []
     for test_idx in range(n_subreddits):
+        if test_idx not in [1,3,6,11]:
+            continue
         print(f'testing for {test_idx}')
         test_sel = data.subreddits[test_idx]
         test_sel_size = test_sel.sum()
@@ -128,7 +130,10 @@ def new_experiment(data, n_classes, target, method):
         Xtgt_rest = X[only_test]
         ytgt_rest = y[only_test]
 
-        print(f'{test_idx=}\ttrain-only={only_train.sum()}\tcommon={common_labels.sum()}\ttest-only={only_test.sum()}')
+        print(f'{test_idx=}\ttrain-only={only_train.sum()}'
+              f'\tcommon={common_labels.sum()}\t({LabelledCollection(Xtgt, ytgt, classes).counts()})'
+              f'\ttest-only={only_test.sum()}\t({LabelledCollection(Xtgt_rest, ytgt_rest, classes).counts()})'
+              f'\t')
 
         method.fit(Xsrc, ysrc, Xtgt, ytgt)
         predicted_prevalence = method.join_quantify(Xtgt, ytgt, Xtgt_rest)

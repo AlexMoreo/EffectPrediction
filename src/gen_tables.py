@@ -1,4 +1,4 @@
-# from submodule.result_table.src.table import Table
+# from submodules.result_table.src.table import Table
 from itertools import product
 from glob import glob
 from os.path import join
@@ -76,7 +76,7 @@ def gen_tables_global(datasets, n_classes_list, result_dir, tables_pdf_path):
     pv['Mean'] = mean_values
     print(pv)
 
-    Table.LatexPDF(tables_pdf_path, tables, resizebox=False)
+    Table.LatexPDF(tables_pdf_path, tables, resizebox=True, verbose=True)
 
 
 if __name__ == '__main__':

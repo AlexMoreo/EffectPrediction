@@ -3,6 +3,8 @@ from copy import deepcopy
 from typing import List, Iterable
 import numpy as np
 import quapy.functional
+import scipy.special
+from scipy.special import softmax
 from quapy.data import LabelledCollection
 from quapy.method.base import BaseQuantifier
 from quapy.method.non_aggregative import MaximumLikelihoodPrevalenceEstimation as MLPE
@@ -10,13 +12,14 @@ from quapy.method.aggregative import CC, PCC, PACC, EMQ, KDEyML
 from quapy.method.meta import Ensemble
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.frozen import FrozenEstimator
-from statsmodels.miscmodels.ordinal_model import OrderedModel
+# from statsmodels.miscmodels.ordinal_model import OrderedModel
 # from mord import LogisticIT
 import warnings
 
+
 from sklearn.linear_model import LogisticRegression
 
-from classification import BlockEnsembleClassifier, OrderedLogisticRegression
+# from classification import BlockEnsembleClassifier, OrderedLogisticRegression
 from classifier_calibrators import IsotonicCalibration, LasCalCalibration, TransCalCalibrator, HeadToTailCalibrator, \
     CpcsCalibrator
 from utils import mmd_pairwise_rbf_blocks, mmd_pairwise_rbf_blocks_pval
@@ -137,12 +140,16 @@ class SelectStatSimilarMMDPolicy(SelectionPolicy):
 
 
 class FromKnownPart(ABC):
+
+    def quantify_test(self, X):
+        return self.predict_proba(X).mean(axis=0)
+
     def join_quantify(self, Xtgt, ytgt, X):
         n_known = len(ytgt)
         n_unknown = X.shape[0]
         n = n_known+n_unknown
         priors_knw = quapy.functional.prevalence_from_labels(ytgt, classes=self.base_classifier.classes_)
-        priors_unk = self.predict_proba(X).mean(axis=0)
+        priors_unk = self.quantify_test(X)
         priors = priors_knw*(n_known/n) + priors_unk*(n_unknown/n)
         return priors
 
@@ -166,6 +173,36 @@ class PCCrecalib(FromKnownPart):
         calib = self.calibrated.predict_proba(X)
         return calib
 
+
+class PACCrecalib(FromKnownPart):
+
+    def __init__(self, base_classifier):
+        self.q = PACC(classifier=base_classifier)
+        self.base_classifier = self.q.classifier
+
+    def fit(self, Xsrc, ysrc, Xtgt, ytgt):
+        source = LabelledCollection(Xsrc, ysrc)
+        target = LabelledCollection(Xtgt, ytgt, classes=source.classes_)
+        self.q.fit(source, val_split=target)
+        return self
+
+    def quantify_test(self, X):
+        return self.q.quantify(X)
+
+
+class CCnaive(FromKnownPart):
+    def __init__(self, base_classifier):
+        self.q = CC(classifier=base_classifier)
+        self.base_classifier = self.q.classifier
+
+    def fit(self, Xsrc, ysrc, Xtgt, ytgt):
+        source = LabelledCollection(Xsrc, ysrc)
+        target = LabelledCollection(Xtgt, ytgt, classes=source.classes_)
+        self.q.fit(source+target)
+        return self
+
+    def quantify_test(self, X):
+        return self.q.quantify(X)
 
 
 class PCCnaive(FromKnownPart):
@@ -261,8 +298,41 @@ class PCCHead2Tail(FromKnownPart):
         Pcal = self.calibrator.calibrate(self.Xsrc, self.ysrc, self.Xtgt, self.Ptgt, self.ytgt, X, P)
         return Pcal
 
-class CalibrateExtrapolate:
-    pass
+
+class KDErecalib(FromKnownPart):
+    def __init__(self, base_classifier, bandwidth=0.1):
+        self.q = KDEyML(base_classifier, bandwidth=bandwidth)
+        self.base_classifier = self.q.classifier
+
+    def fit(self, Xsrc, ysrc, Xtgt, ytgt):
+        source = LabelledCollection(Xsrc, ysrc)
+        target = LabelledCollection(Xtgt, ytgt, classes=source.classes_)
+        self.q.fit(source, val_split=target)
+        return self
+
+    def quantify_test(self, X):
+        return self.q.quantify(X)
+
+
+class KDEcalibrateExtrapolate(FromKnownPart):
+    def __init__(self, base_classifier, bandwidth=0.1):
+        self.q = KDEyML(base_classifier, bandwidth=bandwidth)
+        self.base_classifier = self.q.classifier
+
+    def fit(self, Xsrc, ysrc, Xtgt, ytgt):
+        source = LabelledCollection(Xsrc, ysrc)
+        target = LabelledCollection(Xtgt, ytgt, classes=source.classes_)
+        self.q.fit(source, val_split=target)
+        return self
+
+    def predict_proba(self, X):
+        P = self.base_classifier.predict_proba(X)
+        densities_fn = self.q.mix_densities
+        point_densities = np.asarray([self.q.pdf(density_i, P) for density_i in densities_fn]).T
+        probabilities = softmax(point_densities, axis=1)
+        # l1_norms = point_densities.sum(axis=1)
+        # probabilities = point_densities/l1_norms[:,np.newaxis]
+        return probabilities
 
 
 def methods(base_classifier, prefix_idx):
@@ -273,7 +343,7 @@ def methods(base_classifier, prefix_idx):
     # yield 'PCC-sel', SelectAndQuantify(PCC(deepcopy(base_classifier))), SelectMedianMMDPolicy()
     # yield 'PCC-psel', SelectAndQuantify(PCC(deepcopy(base_classifier))), SelectStatSimilarMMDPolicy()
     # yield 'bPCC', SelectAndQuantify(PCC(BlockEnsembleClassifier(deepcopy(base_classifier), prefix_idx))), SelectAllPolicy()
-    yield 'bPCC-cv', SelectAndQuantify(PCC(BlockEnsembleClassifier(deepcopy(base_classifier), prefix_idx, kfcv=5))), SelectAllPolicy()
+    # yield 'bPCC-cv', SelectAndQuantify(PCC(BlockEnsembleClassifier(deepcopy(base_classifier), prefix_idx, kfcv=5))), SelectAllPolicy()
     # yield 'PACC', SelectAndQuantify(PACC(deepcopy(base_classifier))), SelectAllPolicy()
     # yield 'EMQ', SelectAndQuantify(EMQ(deepcopy(base_classifier))), SelectAllPolicy()
     # yield 'KDEy', SelectAndQuantify(KDEyML(deepcopy(base_classifier))), SelectAllPolicy()
@@ -287,8 +357,19 @@ def methods(base_classifier, prefix_idx):
 
 def new_methods(base_classifier):
     yield 'PCC-recalib', PCCrecalib(base_classifier=base_classifier)
+    yield 'CC-norcalib', CCnaive(base_classifier=base_classifier)
     yield 'PCC-norcalib', PCCnaive(base_classifier=base_classifier)
+    # yield 'PACC-withlabel', PACCrecalib(base_classifier=base_classifier) # <- va fatal
     yield 'PCC-lascal',  PCClascal(base_classifier=base_classifier)
     yield 'PCC-transcal', PCCTransCal(base_classifier=base_classifier)
     yield 'PCC-cpcs', PCC_Cpcs(base_classifier=base_classifier)
     # yield 'PCC-head2tail', PCCHead2Tail(base_classifier=base_classifier)
+    # yield 'KDE-recalib', KDErecalib(base_classifier=base_classifier)
+    # yield 'KDE-recalib0.5', KDErecalib(base_classifier=base_classifier, bandwidth=0.5)
+    yield 'KDE-recalib0.01', KDErecalib(base_classifier=base_classifier, bandwidth=0.01)
+    yield 'KDE-recalib0.005', KDErecalib(base_classifier=base_classifier, bandwidth=0.005)
+    yield 'KDE-recalib0.001', KDErecalib(base_classifier=base_classifier, bandwidth=0.001)
+    yield 'KDE-recalib0.05', KDErecalib(base_classifier=base_classifier, bandwidth=0.05)
+    yield 'KDE-recalibAuto', KDErecalib(base_classifier=base_classifier, bandwidth='auto')
+    yield 'KDE-CE0.1', KDEcalibrateExtrapolate(base_classifier=base_classifier, bandwidth=0.1)
+    yield 'KDE-CE0.01', KDEcalibrateExtrapolate(base_classifier=base_classifier, bandwidth=0.01)
