@@ -2,6 +2,7 @@ from sklearn import metrics
 from sklearn.exceptions import ConvergenceWarning
 from tqdm import tqdm
 import numpy as np
+import quapy as qp
 
 # implementations from: https://github.com/jindongwang/transferlearning/blob/master/code/distance/mmd_numpy_sklearn.py
 
@@ -76,7 +77,7 @@ def mmd_rbf_blocks_matrix(X, Y, blocks_idx, gammas=1.):
 
     return M
 
-def mmd_pairwise_rbf_blocks(Xs, blocks_idx, gammas=1.):
+def mmd_pairwise_rbf_blocks(Xs, blocks_idx, gammas=1., **kwargs):
     n = len(Xs)
     mmd_matrix = np.zeros(shape=(n, n))
     for i in range(n-1):
@@ -107,19 +108,33 @@ def mmd_rbf_blocks_pval(X, Y, blocks_idx, gammas=1., trials=1000):
         M = M[np.ix_(idx, idx)]
         mmds_null.append(MMD_from_matrix(M, nX, nY))
 
-    # Z = np.vstack([X,Y])
-    # mmds_null = []
-    # for _ in range(trials):
-    #     Z = np.random.permutation(Z)
-    #     X_, Y_ = Z[:nX], Z[nX:]
-    #     mmd_null = mmd_rbf_blocks(X_, Y_, blocks_idx, gammas)
-    #     mmds_null.append(mmd_null)
-
     mmds_null = np.asarray(mmds_null)
     p_value = np.mean(mmds_null >= mmd)
 
     return mmd, p_value
 
+
+def mmd_pairwise_rbf_blocks_pval(Xs, blocks_idx, gammas=1.):
+    n = len(Xs)
+    mmd_matrix = np.zeros(shape=(n, n))
+    mmd_pvals = np.zeros(shape=(n, n))
+
+    def job(args):
+        Xi, Xj, blocks_idx, gammas = args
+        return mmd_rbf_blocks_pval(Xi, Xj, blocks_idx, gammas)
+
+    mmds_pvals = qp.util.parallel(job, [(Xs[i], Xs[j], blocks_idx, gammas) for i in range(n-1) for j in range(i+1,n)], n_jobs=-1, asarray=False)
+    it=0
+    for i in range(n-1):
+        for j in range(i+1, n):
+            mmd, pval = mmds_pvals[it]
+            it+=1
+            # mmd, pval = mmd_rbf_blocks_pval(Xs[i], Xs[j], blocks_idx, gammas)
+            mmd_matrix[i, j] = mmd
+            mmd_matrix[j, i] = mmd
+            mmd_pvals[i, j] = pval
+            mmd_pvals[j, i] = pval
+    return mmd_matrix, mmd_pvals
 
 if __name__ == '__main__':
     import numpy as np

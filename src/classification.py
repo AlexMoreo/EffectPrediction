@@ -6,6 +6,8 @@ from sklearn.linear_model import LogisticRegression
 import numpy as np
 from sklearn import clone
 import quapy.functional as F
+from statsmodels.miscmodels.ordinal_model import OrderedModel
+from statsmodels.tools import add_constant
 
 
 class BlockEnsembleClassifier(BaseEstimator):
@@ -71,34 +73,47 @@ class BlockEnsembleClassifier(BaseEstimator):
         return self.meta.predict_proba(P)
 
 
+class OrderedLogisticRegression(BaseEstimator):
+    """
+    Wrapper of statsmodels' ordered LR
+    """
+
+    def __init__(self):
+        self.olr = None
+
+    def fit(self, X, y):
+        X = np.asarray(X)
+        y = np.asarray(y)
+
+        self.constant_cols_idx = np.isclose(X.var(axis=0), 0)
+        if (self.constant_cols_idx).any():  # if there are constant columns
+            X = X[:, ~self.constant_cols_idx]  # remove constants
+
+        self.olr = OrderedModel(y, X, distr='logit')
+        self.res_log = self.olr.fit(method='lbfgs', disp=False)
+        return self
+
+    def predict(self, X):
+        print('in predict')
+        posteriors = self.predict_proba(X)
+        return np.argmax(posteriors, axis=1)
+
+    def predict_proba(self, X):
+        print('in predict_proba')
+        X = np.asarray(X)
+        if (self.constant_cols_idx).any():  # if there are constant columns
+            X = X[:, ~self.constant_cols_idx]  # remove constants
+        P = self.res_log.model.predict(self.res_log.params, X)
+        return P
+
+
 if __name__ == '__main__':
-    from data import load_dataset
-    from sklearn.model_selection import cross_val_score, cross_val_predict
-    import warnings
-    warnings.filterwarnings("ignore", category=UserWarning, module='sklearn')
-    warnings.filterwarnings("ignore", category=ConvergenceWarning, module='sklearn')
+    import quapy as qp
+    data = qp.datasets.fetch_UCIMulticlassDataset(qp.datasets.UCI_MULTICLASS_DATASETS[2])
+    train, test = data.train_test
+    olr = OrderedLogisticRegression()
+    olr.fit(*train.Xy)
+    pred_prob = olr.predict_proba(test.X)
+    print(pred_prob)
 
-    
-    for path in [
-        '../datasets/datasets_periods/activity_dataset',
-        '../datasets/datasets_periods/toxicity_dataset',
-        '../datasets/datasets_periods/diversity_dataset'
-    ]:
-
-        lr_scores, block_scores = [], []
-        for period in range(7):
-            print('testing for period', period)
-            cov_names, covariates, labels, subreddits_names, subreddits = load_dataset(path, with_periods=True, return_period=period)
-
-            cls = LogisticRegression()
-            lr_score = cross_val_score(cls, covariates, labels, n_jobs=-1, scoring='accuracy')
-            lr_scores.append(np.mean(lr_score))
-
-            cls = BlockEnsembleClassifier(cls, cov_names)
-            block_score = cross_val_score(cls, covariates, labels, n_jobs=-1, scoring='accuracy')
-            block_scores.append(np.mean(block_score))
-
-        print(path)
-        print(f'LR score = {np.mean(lr_scores):.4f}')
-        print(f'Block score = {np.mean(block_scores):.4f}')
 

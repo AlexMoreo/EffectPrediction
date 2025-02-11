@@ -7,6 +7,11 @@ from sklearn.utils import Bunch
 from collections import OrderedDict
 
 
+THRESHOLD_2_CLASSES={
+    # abandoned users have -1 score, this binarizes the dataset into abandoned or not abandoned
+    'activity': [-0.99],
+}
+
 THRESHOLD_3_CLASSES={
     'activity': [0.4],
     'diversity': [0.3],
@@ -41,8 +46,12 @@ SUBREDDIT_NAMES = [
 def load_dataset(path, n_classes, filter_out_multiple_subreddits=False, filter_abandoned_activity=True):
 
     # asserts
-    if n_classes not in [3, 5]:
+    if n_classes not in [2, 3, 5]:
         raise ValueError(f'unexpected {n_classes=}; valid values are 3, 5')
+
+    if n_classes == 2:
+        assert 'activity' in path, 'binarization only works for the "activity" dataset'
+        assert not filter_abandoned_activity, 'binarization and filtering abandoned are not compatible'
 
     if not os.path.exists(path):
         raise ValueError(f'file {path} not found!')
@@ -61,7 +70,13 @@ def load_dataset(path, n_classes, filter_out_multiple_subreddits=False, filter_a
         df.pop('index')
 
     # prepare the class-specific thresholds for binning the scores into labels
-    thresholds = THRESHOLD_3_CLASSES if n_classes==3 else THRESHOLD_5_CLASSES
+    thresholds = {
+        2: THRESHOLD_2_CLASSES,
+        3: THRESHOLD_3_CLASSES,
+        5: THRESHOLD_5_CLASSES
+    }.get(n_classes, None)
+    assert thresholds is not None, 'unknown thresholds'
+
     threshold_values = None
     for data_name in thresholds.keys():
         if data_name in path:
@@ -70,8 +85,11 @@ def load_dataset(path, n_classes, filter_out_multiple_subreddits=False, filter_a
         f'unknown threshold for dataset in path {path}'
 
     # make threshold_values symmetric and bounded by inf; e.g., [0.2, 0.55] -> [-inf, -0.55, -0.2, 0.2, 0.55, inf]
-    threshold_values = sorted(threshold_values)
-    threshold_values = [-np.inf] + [-t for t in threshold_values[::-1]] + threshold_values + [np.inf]
+    if n_classes in [3,5]:
+        threshold_values = sorted(threshold_values)
+        threshold_values = [-np.inf] + [-t for t in threshold_values[::-1]] + threshold_values + [np.inf]
+    elif n_classes==2:
+        threshold_values = [-np.inf] + threshold_values + [np.inf]
     new_labels = np.arange(len(threshold_values)-1)
 
     # parsing information
