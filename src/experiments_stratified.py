@@ -56,21 +56,19 @@ def experiment(data, n_classes, target, method, policy):
 
         y = data.y if period == -1 else data.y_periods[period]
 
-        data_by_subreddit = []
-        for subreddit_idx, subreddit_name in enumerate(data.subreddit_names):
-            Xsub = X_by_subreddit[subreddit_idx]
-            subreddit_sel = data.subreddits[subreddit_idx]
-            ysub = y[subreddit_sel]
-            data_by_subreddit.append(LabelledCollection(Xsub, ysub, classes=classes))
+        n = X.shape[0]
+        random_order = np.random.permutation(n)
+        n_batches = 10
+        batch_size = n//n_batches
 
-        # blocks_idx = list(data.prefix_idx.values())
-        # policy.feed(data_by_subreddit, blocks_idx=blocks_idx, gammas=1.)
 
-        def job(i):  # one of the jobs in a LOO evaluation
-            i=int(i)
-            test_data = data_by_subreddit[i]
-            train_data_list = [data for j, data in enumerate(data_by_subreddit) if j != i]
-            selection = policy.get_selection(test_index=i)
+        def job(it):
+            split_point = (it+1)*batch_size
+            train_idx, test_idx = random_order[:split_point], random_order[split_point:]
+            Xtr = X[train_idx]
+            ytr = y[train_idx]
+            Xte = X[test_idx]
+            yte = y[test_idx]
             method.fit(train_data_list, select=selection)
             predicted_prevalence = method.quantify(test_data.X)
             true_prevalence = test_data.prevalence()

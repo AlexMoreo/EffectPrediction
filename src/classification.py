@@ -1,4 +1,8 @@
+from itertools import product
 from typing import OrderedDict
+
+from quapy.data import LabelledCollection
+from sklearn.decomposition import PCA
 from sklearn.model_selection import cross_val_predict
 from sklearn.base import BaseEstimator
 from sklearn.exceptions import ConvergenceWarning
@@ -6,6 +10,10 @@ from sklearn.linear_model import LogisticRegression
 import numpy as np
 from sklearn import clone
 import quapy.functional as F
+
+from data import load_dataset
+
+
 # from statsmodels.miscmodels.ordinal_model import OrderedModel
 # from statsmodels.tools import add_constant
 
@@ -107,13 +115,38 @@ class BlockEnsembleClassifier(BaseEstimator):
 #         return P
 #
 #
-# if __name__ == '__main__':
-#     import quapy as qp
-#     data = qp.datasets.fetch_UCIMulticlassDataset(qp.datasets.UCI_MULTICLASS_DATASETS[2])
-#     train, test = data.train_test
-#     olr = OrderedLogisticRegression()
-#     olr.fit(*train.Xy)
-#     pred_prob = olr.predict_proba(test.X)
-#     print(pred_prob)
-#
+if __name__ == '__main__':
+    from os.path import join
+    from quapy.method.aggregative import CC, PACC, EMQ
+    from sklearn.ensemble import RandomForestClassifier
+    import quapy as qp
+
+    dataset_dir = '../datasets'
+    targets = ['global']  # , 'periods']
+    n_classes_list = [3]
+    dataset_names = ['diversity', 'toxicity', 'activity']
+    for dataset_name, n_classes, target in product(dataset_names, n_classes_list, targets):
+        print(f'running {dataset_name=} {n_classes}')
+        data = load_dataset(join(dataset_dir, f'{dataset_name}_dataset'), n_classes=n_classes, filter_out_multiple_subreddits=False)
+        # y = data.y
+        y = (data.scores > 0).astype(int)
+        X = data.X
+        X = PCA(n_components=20).fit_transform(X)
+        lc = LabelledCollection(X, y)
+        train, test = lc.split_stratified()
+        cls = LogisticRegression(C=1)
+        # cls = LogisticRegression(C=0.0001)
+        # cls = RandomForestClassifier()
+        pacc = PACC(cls, n_jobs=-1)
+        pacc.fit(train)
+        print(pacc.Pte_cond_estim_)
+        print(f'rank={np.linalg.matrix_rank(pacc.Pte_cond_estim_)}')
+        p_hat = pacc.quantify(test.X)
+        ae = qp.error.ae(test.prevalence(), p_hat)
+        print(f'true prev {qp.functional.strprev(test.prevalence())}')
+        print(f'true prev {qp.functional.strprev(p_hat)}')
+        print(f'pacc {ae=:.4f}')
+        y_hat = pacc.classifier.predict(test.X)
+        accuracy = (y_hat==test.y).mean()
+        print(f'classifier accuracy = {accuracy:.4f}')
 

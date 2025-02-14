@@ -82,7 +82,7 @@ def gen_tables_global(datasets, n_classes_list, result_dir, tables_pdf_path):
 if __name__ == '__main__':
 
     datasets = ['activity', 'diversity', 'toxicity']
-    # n_classes_list = ['3_classes', '5_classes']
+    # n_classes_list = ['3_classes']
     n_classes_list = ['5_classes']
 
     # result_dir = '../results_periods'
