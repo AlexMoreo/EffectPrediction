@@ -3,7 +3,7 @@ from typing import OrderedDict
 
 from quapy.data import LabelledCollection
 from sklearn.decomposition import PCA
-from sklearn.model_selection import cross_val_predict
+from sklearn.model_selection import cross_val_predict, GridSearchCV
 from sklearn.base import BaseEstimator
 from sklearn.exceptions import ConvergenceWarning
 from sklearn.linear_model import LogisticRegression
@@ -12,7 +12,6 @@ from sklearn import clone
 import quapy.functional as F
 
 from data import load_dataset
-
 
 # from statsmodels.miscmodels.ordinal_model import OrderedModel
 # from statsmodels.tools import add_constant
@@ -117,36 +116,85 @@ class BlockEnsembleClassifier(BaseEstimator):
 #
 if __name__ == '__main__':
     from os.path import join
-    from quapy.method.aggregative import CC, PACC, EMQ
+    from quapy.method.aggregative import CC, PACC, EMQ, PCC
     from sklearn.ensemble import RandomForestClassifier
     import quapy as qp
+    import warnings
+    from sklearn.feature_selection import SelectKBest, chi2, mutual_info_classif, f_classif
 
-    dataset_dir = '../datasets'
-    targets = ['global']  # , 'periods']
-    n_classes_list = [3]
-    dataset_names = ['diversity', 'toxicity', 'activity']
-    for dataset_name, n_classes, target in product(dataset_names, n_classes_list, targets):
-        print(f'running {dataset_name=} {n_classes}')
-        data = load_dataset(join(dataset_dir, f'{dataset_name}_dataset'), n_classes=n_classes, filter_out_multiple_subreddits=False)
-        # y = data.y
-        y = (data.scores > 0).astype(int)
-        X = data.X
-        X = PCA(n_components=20).fit_transform(X)
-        lc = LabelledCollection(X, y)
-        train, test = lc.split_stratified()
-        cls = LogisticRegression(C=1)
-        # cls = LogisticRegression(C=0.0001)
-        # cls = RandomForestClassifier()
-        pacc = PACC(cls, n_jobs=-1)
-        pacc.fit(train)
-        print(pacc.Pte_cond_estim_)
-        print(f'rank={np.linalg.matrix_rank(pacc.Pte_cond_estim_)}')
-        p_hat = pacc.quantify(test.X)
-        ae = qp.error.ae(test.prevalence(), p_hat)
-        print(f'true prev {qp.functional.strprev(test.prevalence())}')
-        print(f'true prev {qp.functional.strprev(p_hat)}')
-        print(f'pacc {ae=:.4f}')
-        y_hat = pacc.classifier.predict(test.X)
-        accuracy = (y_hat==test.y).mean()
-        print(f'classifier accuracy = {accuracy:.4f}')
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=ConvergenceWarning)
+
+        dataset_dir = '../datasets'
+        targets = ['global']  # , 'periods']
+        n_classes_list = [2]
+        # dataset_names = ['diversity', 'toxicity', 'activity']
+        dataset_names = ['activity']
+        for dataset_name, n_classes, target in product(dataset_names, n_classes_list, targets):
+            print(f'running {dataset_name=} {n_classes}')
+            data = load_dataset(join(dataset_dir, f'{dataset_name}_dataset'), n_classes=n_classes,
+                                filter_out_multiple_subreddits=False,
+                                filter_abandoned_activity=False)
+
+            y = data.y
+            X = data.X
+            # y = (data.scores > 0).astype(int)
+            # print(np.logical_and(y != 1, y != 3))
+            # sel = np.logical_and(y!=1, y!=3)
+            # sel = y!=1
+            # sel = np.logical_and(sel, y!=2)
+            # sel = np.logical_and(sel, y != 3)
+            # X=X[sel]
+            # y=y[sel]
+            # y = np.asarray([{0:0, 4:1}[label] for label in y])  # <-- relabeling removing difficult in-between classes
+            # X = PCA(n_components=20).fit_transform(X)
+            # X = SelectKBest(k=100, score_func=f_classif).fit_transform(X, y)
+            lc = LabelledCollection(X, y)
+            train, test = lc.split_stratified()
+            # cls = LogisticRegression(C=1)
+            # optim = GridSearchCV(
+            #     estimator=LogisticRegression(),
+            #     param_grid={'C':np.logspace(-3,3,7), 'class_weight':['balanced', None]},
+            #     n_jobs=-1,
+            #     refit=False,
+            # ).fit(X,y)
+            # print(optim.best_params_)
+            # cls = LogisticRegression(**optim.best_params_)
+            cls = LogisticRegression(C=1)
+            # cls = RandomForestClassifier()
+            pacc = PACC(cls, n_jobs=-1)
+            pacc.fit(train)
+            print(pacc.Pte_cond_estim_)
+            print(f'rank={np.linalg.matrix_rank(pacc.Pte_cond_estim_)}')
+            p_hat = pacc.quantify(test.X)
+            ae = qp.error.ae(test.prevalence(), p_hat)
+            print(f'train prev {qp.functional.strprev(train.prevalence())}')
+            print(f'true prev {qp.functional.strprev(test.prevalence())}')
+            print(f'estim prev {qp.functional.strprev(p_hat)}')
+            print(f'pacc {ae=:.4f}')
+
+            cc = CC().fit(train)
+            p_hat = cc.quantify(test.X)
+            ae = qp.error.ae(test.prevalence(), p_hat)
+            print(f'CC estim prev {qp.functional.strprev(p_hat)}')
+            print(f'cc {ae=:.4f}')
+
+            pcc = PCC(cc.classifier)
+            p_hat = pcc.quantify(test.X)
+            ae = qp.error.ae(test.prevalence(), p_hat)
+            print(f'PCC estim prev {qp.functional.strprev(p_hat)}')
+            print(f'pcc {ae=:.4f}')
+
+
+            y_hat = pacc.classifier.predict(test.X)
+            accuracy = (y_hat==test.y).mean()
+            print(f'classifier accuracy = {accuracy:.4f}')
+
+            qp.environ["SAMPLE_SIZE"]=200
+            mae = qp.evaluation.evaluate(pacc, qp.protocol.UPP(test, repeats=100), error_metric='mae')
+            print(f'PACC {mae=:.4f}')
+
+
+            mae = qp.evaluation.evaluate(cc, qp.protocol.UPP(test, repeats=100), error_metric='mae')
+            print(f'CC {mae=:.4f}')
 

@@ -373,3 +373,4 @@ def new_methods(base_classifier):
     yield 'KDE-recalibAuto', KDErecalib(base_classifier=base_classifier, bandwidth='auto')
     yield 'KDE-CE0.1', KDEcalibrateExtrapolate(base_classifier=base_classifier, bandwidth=0.1)
     yield 'KDE-CE0.01', KDEcalibrateExtrapolate(base_classifier=base_classifier, bandwidth=0.01)
+    yield 'KDE-CEauto', KDEcalibrateExtrapolate(base_classifier=base_classifier, bandwidth='auto')
