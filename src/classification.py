@@ -3,6 +3,7 @@ from typing import OrderedDict
 
 from quapy.data import LabelledCollection
 from sklearn.decomposition import PCA
+from sklearn.metrics import f1_score
 from sklearn.model_selection import cross_val_predict, GridSearchCV
 from sklearn.base import BaseEstimator
 from sklearn.exceptions import ConvergenceWarning
@@ -127,9 +128,9 @@ if __name__ == '__main__':
 
         dataset_dir = '../datasets'
         targets = ['global']  # , 'periods']
-        n_classes_list = [2]
-        # dataset_names = ['diversity', 'toxicity', 'activity']
-        dataset_names = ['activity']
+        n_classes_list = [5]
+        dataset_names = ['diversity', 'toxicity', 'activity']
+        # dataset_names = ['activity']
         for dataset_name, n_classes, target in product(dataset_names, n_classes_list, targets):
             print(f'running {dataset_name=} {n_classes}')
             data = load_dataset(join(dataset_dir, f'{dataset_name}_dataset'), n_classes=n_classes,
@@ -160,41 +161,67 @@ if __name__ == '__main__':
             # ).fit(X,y)
             # print(optim.best_params_)
             # cls = LogisticRegression(**optim.best_params_)
-            cls = LogisticRegression(C=1)
+            # cls = LogisticRegression(C=1)
+            # cls = BlockEnsembleClassifier(LogisticRegression(), blocks_ids=data.prefix_idx)
             # cls = RandomForestClassifier()
-            pacc = PACC(cls, n_jobs=-1)
-            pacc.fit(train)
-            print(pacc.Pte_cond_estim_)
-            print(f'rank={np.linalg.matrix_rank(pacc.Pte_cond_estim_)}')
-            p_hat = pacc.quantify(test.X)
-            ae = qp.error.ae(test.prevalence(), p_hat)
-            print(f'train prev {qp.functional.strprev(train.prevalence())}')
-            print(f'true prev {qp.functional.strprev(test.prevalence())}')
-            print(f'estim prev {qp.functional.strprev(p_hat)}')
-            print(f'pacc {ae=:.4f}')
+            # pacc = PACC(cls, n_jobs=-1)
+            # pacc.fit(train)
+            # print(pacc.Pte_cond_estim_)
+            # print(f'rank={np.linalg.matrix_rank(pacc.Pte_cond_estim_)}')
+            # p_hat = pacc.quantify(test.X)
+            # ae = qp.error.ae(test.prevalence(), p_hat)
+            # print(f'train prev {qp.functional.strprev(train.prevalence())}')
+            # print(f'true prev {qp.functional.strprev(test.prevalence())}')
+            # print(f'estim prev {qp.functional.strprev(p_hat)}')
+            # print(f'pacc {ae=:.4f}')
+            #
+            # cc = CC().fit(train)
+            # p_hat = cc.quantify(test.X)
+            # ae = qp.error.ae(test.prevalence(), p_hat)
+            # print(f'CC estim prev {qp.functional.strprev(p_hat)}')
+            # print(f'cc {ae=:.4f}')
+            #
+            # pcc = PCC(cc.classifier)
+            # p_hat = pcc.quantify(test.X)
+            # ae = qp.error.ae(test.prevalence(), p_hat)
+            # print(f'PCC estim prev {qp.functional.strprev(p_hat)}')
+            # print(f'pcc {ae=:.4f}')
 
-            cc = CC().fit(train)
-            p_hat = cc.quantify(test.X)
-            ae = qp.error.ae(test.prevalence(), p_hat)
-            print(f'CC estim prev {qp.functional.strprev(p_hat)}')
-            print(f'cc {ae=:.4f}')
-
-            pcc = PCC(cc.classifier)
-            p_hat = pcc.quantify(test.X)
-            ae = qp.error.ae(test.prevalence(), p_hat)
-            print(f'PCC estim prev {qp.functional.strprev(p_hat)}')
-            print(f'pcc {ae=:.4f}')
-
-
-            y_hat = pacc.classifier.predict(test.X)
+            cls = BlockEnsembleClassifier(LogisticRegression(), blocks_ids=data.prefix_idx)
+            cls.fit(*train.Xy)
+            y_hat = cls.predict(test.X)
             accuracy = (y_hat==test.y).mean()
             print(f'classifier accuracy = {accuracy:.4f}')
+            if n_classes == 2:
+                f1 = f1_score(test.y, y_hat)
+                print(f'classifier f1 = {f1:.4f}')
+            else:
+                f1_macro = f1_score(test.y, y_hat, average='macro')
+                f1_micro = f1_score(test.y, y_hat, average='micro')
+                print(f'classifier Macro f1 = {f1_macro:.4f}')
+                print(f'classifier Micro f1 = {f1_micro:.4f}')
 
-            qp.environ["SAMPLE_SIZE"]=200
-            mae = qp.evaluation.evaluate(pacc, qp.protocol.UPP(test, repeats=100), error_metric='mae')
-            print(f'PACC {mae=:.4f}')
+
+            cls = LogisticRegression()
+            cls.fit(*train.Xy)
+            y_hat = cls.predict(test.X)
+            accuracy = (y_hat==test.y).mean()
+            print(f'classifier accuracy = {accuracy:.4f}')
+            if n_classes == 2:
+                f1 = f1_score(test.y, y_hat)
+                print(f'classifier f1 = {f1:.4f}')
+            else:
+                f1_macro = f1_score(test.y, y_hat, average='macro')
+                f1_micro = f1_score(test.y, y_hat, average='micro')
+                print(f'classifier Macro f1 = {f1_macro:.4f}')
+                print(f'classifier Micro f1 = {f1_micro:.4f}')
 
 
-            mae = qp.evaluation.evaluate(cc, qp.protocol.UPP(test, repeats=100), error_metric='mae')
-            print(f'CC {mae=:.4f}')
+            # qp.environ["SAMPLE_SIZE"]=200
+            # mae = qp.evaluation.evaluate(pacc, qp.protocol.UPP(test, repeats=100), error_metric='mae')
+            # print(f'PACC {mae=:.4f}')
+
+
+            # mae = qp.evaluation.evaluate(cc, qp.protocol.UPP(test, repeats=100), error_metric='mae')
+            # print(f'CC {mae=:.4f}')
 

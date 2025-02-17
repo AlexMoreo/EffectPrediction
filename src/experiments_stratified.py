@@ -8,11 +8,15 @@ import quapy as qp
 import numpy as np
 from quapy.data import LabelledCollection
 from quapy.method.aggregative import PCC, PACC, CC
+from quapy.method.base import BaseQuantifier
+from quapy.method.confidence import WithConfidenceABC, ConfidenceIntervals, AggregativeBootstrap
+from quapy.method.non_aggregative import MaximumLikelihoodPrevalenceEstimation
 from sklearn.exceptions import ConvergenceWarning
 from sklearn.linear_model import LogisticRegression
 from data import load_dataset
 import warnings
-from quapy.functional import prevalence_from_labels
+from classification import BlockEnsembleClassifier
+from quapy.functional import prevalence_from_labels, strprev
 
 from utils import mmd_pairwise_rbf_blocks
 
@@ -29,7 +33,81 @@ def experiment(data, n_classes, method):
     n_subreddits = len(data.subreddit_names)
     classes = np.arange(n_classes)
 
-    results = []
+    X = data.X
+    y = data.y
+
+    n = X.shape[0]
+    np.random.seed(0)
+    random_order = np.random.permutation(n)
+    test_split_point = 2*n//3
+    test_idx = random_order[test_split_point:]
+
+    random_order = random_order[:test_split_point]
+    init_train_size = 500
+    train_idx = random_order[:init_train_size]
+    remainder = random_order[init_train_size:]
+
+    batch_size = 100
+    # n_batches = len(remainder) // batc/h_size
+
+    Xte = X[test_idx]
+    yte = y[test_idx]
+    test = LabelledCollection(Xte, yte, classes=classes)
+
+    Xtr = X[train_idx]
+    ytr = y[train_idx]
+    train = LabelledCollection(Xtr, ytr, classes=classes)
+    # test = test.sampling(len(test), *test.prevalence()[::-1])
+    true_prevalence = test.prevalence()
+    print(strprev(true_prevalence))
+
+    results_nmd = []
+    while(len(remainder)>batch_size):
+        warnings.filterwarnings("ignore", category=UserWarning, module='sklearn')
+        warnings.filterwarnings("ignore", category=ConvergenceWarning, module='sklearn')
+
+        method.fit(train)
+        predicted_prevalence = method.quantify(test.X)
+        nmd = qp.error.normalized_match_distance(true_prevalence, predicted_prevalence)
+        results_nmd.append(nmd)
+
+        print(f'[no-CI] train_size={len(train)} {nmd=:.5f}')
+
+        posteriors = method.classifier.predict_proba(X[remainder])
+        conf = posteriors.max(axis=1)
+        order = np.argsort(conf)
+        remainder = remainder[order]
+
+        next_batch_idx = remainder[:batch_size]
+        remainder = remainder[batch_size:]
+        new_Xtr = X[next_batch_idx]
+        new_ytr = y[next_batch_idx]
+        next_batch = LabelledCollection(new_Xtr, new_ytr, classes=classes)
+
+        train = train + next_batch
+
+
+        #
+        # split_point = (batch_id+1)*batch_size
+        # train_idx = random_order[:split_point]
+        # Xtr = X[train_idx]
+        # ytr = y[train_idx]
+        # # train = LabelledCollection(Xtr, ytr, classes=classes)
+        # print('train', strprev(train.prevalence()))
+        # method.fit(train)
+        # predicted_prevalence = method.quantify(test.X)
+        #
+        # # ae = qp.error.ae(true_prevalence, predicted_prevalence)
+        # nmd = qp.error.normalized_match_distance(true_prevalence, predicted_prevalence)
+        # return nmd
+
+    # results_nmd = qp.util.parallel(job, np.arange(n_batches), n_jobs=-1, asarray=True, backend='loky')
+
+    return results_nmd
+
+def experiment_with_conf_intervals(data, n_classes, method):
+    n_subreddits = len(data.subreddit_names)
+    classes = np.arange(n_classes)
 
     X = data.X
     y = data.y
@@ -37,47 +115,104 @@ def experiment(data, n_classes, method):
     n = X.shape[0]
     np.random.seed(0)
     random_order = np.random.permutation(n)
-    n_batches = 10
-    batch_size = n//n_batches
+    test_split_point = 2 * n // 3
+    test_idx = random_order[test_split_point:]
 
-    def job(batch_id):
-        split_point = (batch_id+1)*batch_size
-        train_idx, test_idx = random_order[:split_point], random_order[split_point:]
-        Xtr = X[train_idx]
-        ytr = y[train_idx]
-        Xte = X[test_idx]
-        yte = y[test_idx]
-        train = LabelledCollection(Xtr, ytr, classes=classes)
-        test  = LabelledCollection(Xte, yte, classes=classes)
-        method.fit(train)
+    random_order = random_order[:test_split_point]
+    init_train_size = 500
+    train_idx = random_order[:init_train_size]
+    remainder = random_order[init_train_size:]
+
+    batch_size = 100
+    # n_batches = len(remainder) // batc/h_size
+
+    Xte = X[test_idx]
+    yte = y[test_idx]
+    test = LabelledCollection(Xte, yte, classes=classes)
+
+    Xtr = X[train_idx]
+    ytr = y[train_idx]
+    train = LabelledCollection(Xtr, ytr, classes=classes)
+    # test = test.sampling(len(test), *test.prevalence()[::-1])
+    true_prevalence = test.prevalence()
+    print(strprev(true_prevalence))
+
+    results_nmd = []
+    while(len(remainder)>batch_size):
+        warnings.filterwarnings("ignore", category=UserWarning, module='sklearn')
+        warnings.filterwarnings("ignore", category=ConvergenceWarning, module='sklearn')
+
+        method.fit(train, val_split=5)
         predicted_prevalence = method.quantify(test.X)
-        true_prevalence = test.prevalence()
-
-        # ae = qp.error.ae(true_prevalence, predicted_prevalence)
         nmd = qp.error.normalized_match_distance(true_prevalence, predicted_prevalence)
-        return nmd
+        results_nmd.append(nmd)
 
-    results_nmd = qp.util.parallel(job, np.arange(n_batches), n_jobs=-1, asarray=True, backend='loky')
+        print(f'[with-CI] train_size={len(train)} {nmd=:.5f}')
+
+        np.random.shuffle(remainder)
+        n_remainder = len(remainder)
+        n_remaining_batches = n_remainder//batch_size
+        most_uncertain = None
+        rest = None
+        worst_uncertainty = None
+        for i in range(n_remaining_batches):
+            batch_idx = remainder[i*batch_size:(i+1)*batch_size]
+            rest_idx = np.concatenate([remainder[:i*batch_size], remainder[(i+1)*batch_size:]])
+            Xbatch = X[batch_idx]
+            prev, conf_intervals = method.quantify_conf(Xbatch)
+            uncertainty = conf_intervals.simplex_portion()
+            if worst_uncertainty is None or uncertainty>worst_uncertainty:
+                worst_uncertainty = uncertainty
+                most_uncertain = batch_idx
+                rest = rest_idx
+                # print(f'\tworst uncertainty found={worst_uncertainty:.4f}')
+
+        remainder = rest
+        new_Xtr = X[most_uncertain]
+        new_ytr = y[most_uncertain]
+        next_batch = LabelledCollection(new_Xtr, new_ytr, classes=classes)
+        train = train + next_batch
 
     return results_nmd
 
 
-def methods(base_classifier):
-    yield 'CC', CC(base_classifier)
+def methods(base_classifier, block_ids):
+    # yield 'MLPE', MaximumLikelihoodPrevalenceEstimation()
+    # yield 'CC', CC(base_classifier)
     yield 'PCC', PCC(base_classifier)
-    yield 'PACC', PACC(base_classifier)
+    yield 'PCC-CI', AggregativeBootstrap(PCC(base_classifier), n_train_samples=50, n_test_samples=50, confidence_level=0.95)
+    # yield 'bPCC', PCC(BlockEnsembleClassifier(base_classifier, blocks_ids=block_ids))
+    # yield 'PACC', PACC(base_classifier)
 
 
 def main(data, n_classes, dataset_name):
     base_classifier = LogisticRegression()
-    for method_name, method in methods(base_classifier):
+    all_methods = []
+    all_results = []
+    for method_name, method in methods(base_classifier, data.prefix_idx):
+        if isinstance(method, WithConfidenceABC):
+            continue
         print(f'running {method_name}')
         results = experiment(data, n_classes, method)
-        print(results)
+        all_methods.append(method_name)
+        all_results.append(results)
+
+    for method_name, method in methods(base_classifier, data.prefix_idx):
+        if not isinstance(method, WithConfidenceABC):
+            continue
+        print(f'running {method_name} [bootstrap]')
+        results = experiment_with_conf_intervals(data, n_classes, method)
+        all_methods.append(method_name)
+        all_results.append(results)
+
+    print('[Done]')
+    for method, result in zip(all_methods, all_results):
+        print(f'{method}\t{[f"{x:.4f}" for x in result]}')
+
 
 if __name__ == '__main__':
     dataset_dir = '../datasets'
-    n_classes_list = [5]
+    n_classes_list = [3]
     dataset_names = ['diversity', 'toxicity', 'activity']
     for dataset_name, n_classes in product(dataset_names, n_classes_list):
         print(f'running {dataset_name=} {n_classes}')

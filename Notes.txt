@@ -16,7 +16,10 @@ This has suggested a connection with active learning, TAR for content moderation
 We are also trying to predict period, using the scores of the periods before t as additional covariates to
 predict for period t.
 
+We maybe can endow PCC predictions with confidence intervals (see Denham et al. 2021)
+
 TODO:
 - Stratified
 - Periods with history
-- Recheck classifier accuracy
+- Recheck classifier accuracy, and Block-PCC: the blockwise typically works slightly better in accuracy and equal or
+    slightly worse in macro F1
