@@ -29,7 +29,7 @@ def dump(results, result_path):
         pickle.dump(results, foo, pickle.HIGHEST_PROTOCOL)
 
 
-def experiment(data, n_classes, method):
+def experiment(data, n_classes, method, method_name):
     n_subreddits = len(data.subreddit_names)
     classes = np.arange(n_classes)
 
@@ -48,7 +48,6 @@ def experiment(data, n_classes, method):
     remainder = random_order[init_train_size:]
 
     batch_size = 100
-    # n_batches = len(remainder) // batc/h_size
 
     Xte = X[test_idx]
     yte = y[test_idx]
@@ -62,117 +61,67 @@ def experiment(data, n_classes, method):
     print(strprev(true_prevalence))
 
     results_nmd = []
-    while(len(remainder)>batch_size):
-        warnings.filterwarnings("ignore", category=UserWarning, module='sklearn')
-        warnings.filterwarnings("ignore", category=ConvergenceWarning, module='sklearn')
+    if not isinstance(method, WithConfidenceABC):
+        while(len(remainder)>batch_size):
+            warnings.filterwarnings("ignore", category=UserWarning, module='sklearn')
+            warnings.filterwarnings("ignore", category=ConvergenceWarning, module='sklearn')
 
-        method.fit(train)
-        predicted_prevalence = method.quantify(test.X)
-        nmd = qp.error.normalized_match_distance(true_prevalence, predicted_prevalence)
-        results_nmd.append(nmd)
+            method.fit(train)
+            predicted_prevalence = method.quantify(test.X)
+            nmd = qp.error.normalized_match_distance(true_prevalence, predicted_prevalence)
+            results_nmd.append({'method': method_name, '#train': len(train), 'nmd': nmd})
 
-        print(f'[no-CI] train_size={len(train)} {nmd=:.5f}')
+            print(f'[no-CI] train_size={len(train)} {nmd=:.5f}')
 
-        posteriors = method.classifier.predict_proba(X[remainder])
-        conf = posteriors.max(axis=1)
-        order = np.argsort(conf)
-        remainder = remainder[order]
+            posteriors = method.classifier.predict_proba(X[remainder])
+            conf = posteriors.max(axis=1)
+            order = np.argsort(conf)
+            remainder = remainder[order]
 
-        next_batch_idx = remainder[:batch_size]
-        remainder = remainder[batch_size:]
-        new_Xtr = X[next_batch_idx]
-        new_ytr = y[next_batch_idx]
-        next_batch = LabelledCollection(new_Xtr, new_ytr, classes=classes)
+            next_batch_idx = remainder[:batch_size]
+            remainder = remainder[batch_size:]
+            new_Xtr = X[next_batch_idx]
+            new_ytr = y[next_batch_idx]
+            next_batch = LabelledCollection(new_Xtr, new_ytr, classes=classes)
 
-        train = train + next_batch
+            train = train + next_batch
+    else:
+        while (len(remainder) > batch_size):
+            warnings.filterwarnings("ignore", category=UserWarning, module='sklearn')
+            warnings.filterwarnings("ignore", category=ConvergenceWarning, module='sklearn')
 
+            method.fit(train, val_split=5)
+            predicted_prevalence = method.quantify(test.X)
+            nmd = qp.error.normalized_match_distance(true_prevalence, predicted_prevalence)
+            results_nmd.append({'method': method_name, '#train': len(train), 'nmd': nmd})
 
-        #
-        # split_point = (batch_id+1)*batch_size
-        # train_idx = random_order[:split_point]
-        # Xtr = X[train_idx]
-        # ytr = y[train_idx]
-        # # train = LabelledCollection(Xtr, ytr, classes=classes)
-        # print('train', strprev(train.prevalence()))
-        # method.fit(train)
-        # predicted_prevalence = method.quantify(test.X)
-        #
-        # # ae = qp.error.ae(true_prevalence, predicted_prevalence)
-        # nmd = qp.error.normalized_match_distance(true_prevalence, predicted_prevalence)
-        # return nmd
+            print(f'[with-CI] train_size={len(train)} {nmd=:.5f}')
 
-    # results_nmd = qp.util.parallel(job, np.arange(n_batches), n_jobs=-1, asarray=True, backend='loky')
+            np.random.shuffle(remainder)
+            n_remainder = len(remainder)
+            n_remaining_batches = n_remainder // batch_size
+            most_uncertain = None
+            rest = None
+            worst_uncertainty = None
+            for i in range(n_remaining_batches):
+                batch_idx = remainder[i * batch_size:(i + 1) * batch_size]
+                rest_idx = np.concatenate([remainder[:i * batch_size], remainder[(i + 1) * batch_size:]])
+                Xbatch = X[batch_idx]
+                prev, conf_intervals = method.quantify_conf(Xbatch)
+                uncertainty = conf_intervals.simplex_portion()
+                if worst_uncertainty is None or uncertainty > worst_uncertainty:
+                    worst_uncertainty = uncertainty
+                    most_uncertain = batch_idx
+                    rest = rest_idx
+                    # print(f'\tworst uncertainty found={worst_uncertainty:.4f}')
 
-    return results_nmd
+            remainder = rest
+            new_Xtr = X[most_uncertain]
+            new_ytr = y[most_uncertain]
+            next_batch = LabelledCollection(new_Xtr, new_ytr, classes=classes)
+            train = train + next_batch
 
-def experiment_with_conf_intervals(data, n_classes, method):
-    n_subreddits = len(data.subreddit_names)
-    classes = np.arange(n_classes)
-
-    X = data.X
-    y = data.y
-
-    n = X.shape[0]
-    np.random.seed(0)
-    random_order = np.random.permutation(n)
-    test_split_point = 2 * n // 3
-    test_idx = random_order[test_split_point:]
-
-    random_order = random_order[:test_split_point]
-    init_train_size = 500
-    train_idx = random_order[:init_train_size]
-    remainder = random_order[init_train_size:]
-
-    batch_size = 100
-    # n_batches = len(remainder) // batc/h_size
-
-    Xte = X[test_idx]
-    yte = y[test_idx]
-    test = LabelledCollection(Xte, yte, classes=classes)
-
-    Xtr = X[train_idx]
-    ytr = y[train_idx]
-    train = LabelledCollection(Xtr, ytr, classes=classes)
-    # test = test.sampling(len(test), *test.prevalence()[::-1])
-    true_prevalence = test.prevalence()
-    print(strprev(true_prevalence))
-
-    results_nmd = []
-    while(len(remainder)>batch_size):
-        warnings.filterwarnings("ignore", category=UserWarning, module='sklearn')
-        warnings.filterwarnings("ignore", category=ConvergenceWarning, module='sklearn')
-
-        method.fit(train, val_split=5)
-        predicted_prevalence = method.quantify(test.X)
-        nmd = qp.error.normalized_match_distance(true_prevalence, predicted_prevalence)
-        results_nmd.append(nmd)
-
-        print(f'[with-CI] train_size={len(train)} {nmd=:.5f}')
-
-        np.random.shuffle(remainder)
-        n_remainder = len(remainder)
-        n_remaining_batches = n_remainder//batch_size
-        most_uncertain = None
-        rest = None
-        worst_uncertainty = None
-        for i in range(n_remaining_batches):
-            batch_idx = remainder[i*batch_size:(i+1)*batch_size]
-            rest_idx = np.concatenate([remainder[:i*batch_size], remainder[(i+1)*batch_size:]])
-            Xbatch = X[batch_idx]
-            prev, conf_intervals = method.quantify_conf(Xbatch)
-            uncertainty = conf_intervals.simplex_portion()
-            if worst_uncertainty is None or uncertainty>worst_uncertainty:
-                worst_uncertainty = uncertainty
-                most_uncertain = batch_idx
-                rest = rest_idx
-                # print(f'\tworst uncertainty found={worst_uncertainty:.4f}')
-
-        remainder = rest
-        new_Xtr = X[most_uncertain]
-        new_ytr = y[most_uncertain]
-        next_batch = LabelledCollection(new_Xtr, new_ytr, classes=classes)
-        train = train + next_batch
-
+    results_nmd = pd.DataFrame(results_nmd)
     return results_nmd
 
 
@@ -187,32 +136,21 @@ def methods(base_classifier, block_ids):
 
 def main(data, n_classes, dataset_name):
     base_classifier = LogisticRegression()
-    all_methods = []
     all_results = []
     for method_name, method in methods(base_classifier, data.prefix_idx):
-        if isinstance(method, WithConfidenceABC):
-            continue
         print(f'running {method_name}')
-        results = experiment(data, n_classes, method)
-        all_methods.append(method_name)
+        results = experiment(data, n_classes, method, method_name)
         all_results.append(results)
 
-    for method_name, method in methods(base_classifier, data.prefix_idx):
-        if not isinstance(method, WithConfidenceABC):
-            continue
-        print(f'running {method_name} [bootstrap]')
-        results = experiment_with_conf_intervals(data, n_classes, method)
-        all_methods.append(method_name)
-        all_results.append(results)
-
-    print('[Done]')
-    for method, result in zip(all_methods, all_results):
-        print(f'{method}\t{[f"{x:.4f}" for x in result]}')
+    df = pd.concat(all_results)
+    df['dataset'] = dataset_name
+    df['n_classes'] = n_classes
+    df.to_csv(f'../results_active_learning/{dataset_name}_{n_classes}_classes.csv')
 
 
 if __name__ == '__main__':
     dataset_dir = '../datasets'
-    n_classes_list = [3]
+    n_classes_list = [3,5]
     dataset_names = ['diversity', 'toxicity', 'activity']
     for dataset_name, n_classes in product(dataset_names, n_classes_list):
         print(f'running {dataset_name=} {n_classes}')
