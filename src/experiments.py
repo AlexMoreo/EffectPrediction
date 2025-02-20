@@ -169,14 +169,14 @@ def main(data, n_classes, target, dataset_name, results_dir):
 
 
     # new experiments after the last meeting
-    for method_name, method in new_methods(base_classifier):
-        print(f'running new method {method_name}')
-        result_path = join(results_dir, f'{n_classes}_classes', dataset_name, method_name+'.pkl')
-
-        # skip experiment already computed
-        if not os.path.exists(result_path):
-            results = new_experiment(data, n_classes, target, method)
-            dump(results, result_path)
+    # for method_name, method in new_methods(base_classifier):
+    #     print(f'running new method {method_name}')
+    #     result_path = join(results_dir, f'{n_classes}_classes', dataset_name, method_name+'.pkl')
+    #
+    #     skip experiment already computed
+        # if not os.path.exists(result_path):
+        #     results = new_experiment(data, n_classes, target, method)
+        #     dump(results, result_path)
 
 
 if __name__ == '__main__':

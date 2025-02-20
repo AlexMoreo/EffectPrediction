@@ -104,14 +104,16 @@ def load_dataset(path, n_classes, filter_out_multiple_subreddits=False, filter_a
     for label, scores in label_scores.items():
         label_classes[label] = pd.cut(label_scores[label], bins=threshold_values, labels=new_labels, right=False).to_numpy()
 
-    n_covariates = 623
+    n_new_covariates = 623
+    n_old_covariates = 143
     n_subreddits = len(SUBREDDIT_NAMES)
-    assert len(df.columns) == n_covariates+n_subreddits, 'unexpected number of columns'
-    covariates = df.iloc[:,:n_covariates].values
-    covariate_names = df.columns.values[:n_covariates]
+    assert len(df.columns) in [n_new_covariates+n_subreddits, n_old_covariates+n_subreddits], \
+        'unexpected number of columns'
 
     assert all(df.columns.values[-n_subreddits:] == SUBREDDIT_NAMES), 'unexpected subreddit names'
     subreddits = df.values[:, -n_subreddits:].astype(bool).T
+    covariates = df.iloc[:, :-n_subreddits].values
+    covariate_names = df.columns.values[:-n_subreddits]
 
     # get the feature blocks ids and prefixes
     column_prefixes = [n.split('_')[0] for n in covariate_names]
@@ -128,6 +130,7 @@ def load_dataset(path, n_classes, filter_out_multiple_subreddits=False, filter_a
     data = Bunch(
         X=covariates,
         y=label_classes['global'],
+        authors=authors,
         scores=label_scores['global'],
         y_periods=np.vstack([label_classes[f'label_{period+1}'] for period in range(7)]),
         scores_periods=np.vstack([label_scores[f'label_{period + 1}'] for period in range(7)]),
@@ -140,8 +143,43 @@ def load_dataset(path, n_classes, filter_out_multiple_subreddits=False, filter_a
     return data
 
 
+def merge_data(data_1, data_2):
+    def _sort_bunch_by_author(data):
+        order = np.argsort(data.authors)
+        return Bunch(
+            X=data.X[order],
+            y=data.y[order],
+            authors=data.authors[order],
+            scores=data.scores[order],
+            y_periods=data.y_periods.T[order].T,
+            scores_periods=data.scores_periods.T[order].T,
+            covariate_names=data.covariate_names,
+            subreddit_names=data.subreddit_names,
+            subreddits=data.subreddits.T[order].T,
+            prefix_idx=data.prefix_idx
+        )
+
+    assert sorted(data_1.authors) == sorted(data_2.authors), 'different authors'
+    data_1 = _sort_bunch_by_author(data_1)
+    data_2 = _sort_bunch_by_author(data_2)
+    return Bunch(
+        X=np.hstack([data_1.X, data_2.X]),
+        y=data_1.y,
+        authors=data_1.authors,
+        scores=data_1.scores,
+        y_periods=data_1.y_periods,
+        scores_periods=data_1.scores_periods,
+        covariate_names=data_1.covariate_names,
+        subreddit_names=data_1.subreddit_names,
+        subreddits=data_1.subreddits,
+        prefix_idx=data_1.prefix_idx
+    )
+
 
 if __name__ == '__main__':
-    path = '../datasets/diversity_dataset'
-    data = load_dataset(path, n_classes=5)
-    print(data)
+    print('EN DATA!')
+    path = '../datasets/old_features/activity_dataset'
+    data_old = load_dataset(path, n_classes=5, filter_abandoned_activity=False)
+    path = '../datasets/new_features/activity_dataset'
+    data_new = load_dataset(path, n_classes=5, filter_abandoned_activity=False)
+    merge_data(data_old, data_new)
