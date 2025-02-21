@@ -3,6 +3,10 @@ from sklearn.exceptions import ConvergenceWarning
 from tqdm import tqdm
 import numpy as np
 import quapy as qp
+import warnings
+
+warnings.filterwarnings("ignore", category=UserWarning, module='sklearn')
+warnings.filterwarnings("ignore", category=ConvergenceWarning, module='sklearn')
 
 # implementations from: https://github.com/jindongwang/transferlearning/blob/master/code/distance/mmd_numpy_sklearn.py
 

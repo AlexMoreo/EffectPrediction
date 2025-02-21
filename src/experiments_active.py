@@ -175,15 +175,37 @@ def experiment_pps(data, n_classes, method, method_name):
     X = data.X
     y = data.y
 
-    X = PCA(n_components=100).fit_transform(X)
+    # X = PCA(n_components=100).fit_transform(X)
 
-    data = LabelledCollection(X, y)
-    train, test = data.split_stratified(random_state=0)
+    # data = LabelledCollection(X, y)
+    # train, test = data.split_stratified(random_state=0)
+    sub_idx = 11
+    in_test=data.subreddits[sub_idx]
+    print(f'in {data.subreddit_names[sub_idx]} with {sum(in_test)} instances')
+    train = LabelledCollection(X[~in_test], y[~in_test], classes=classes)
+    test = LabelledCollection(X[in_test], y[in_test], classes=classes)
 
+    # if method_name!='PACC': return
+    # domain_classifier = LogisticRegression()
+    # domain_classifier.fit(X, y=in_test)
+    # posteriors = domain_classifier.predict_proba(X[~in_test])
+    # weights = (posteriors[:, 0] + 1e-7) / (posteriors[:, 1] + 1e-7)
+    # # weights = (posteriors[:, 1] + 1e-7) / (posteriors[:, 1] + 1e-7)
+    #
+    # cls = LogisticRegression()
+    # cls.fit(*train.Xy, sample_weight=weights)
+    # pacc = PACC(classifier=cls)
+    # pacc.fit(train, fit_classifier=False, val_split=train)
+    #
+    # qp.environ['SAMPLE_SIZE']=1000
+    # report = qp.evaluation.evaluation_report(pacc, protocol=UPP(test, repeats=500), error_metrics=[qp.error.nmd, 'ae'])
+    # means = report.mean(numeric_only=True)
+
+    qp.environ['SAMPLE_SIZE'] = 1000
     if method_name not in ['MLPE']:
         dev, val = train.split_stratified(random_state=0)
         if "KDE" in method_name:
-            param_grid = {'classifier__C': np.logspace(-4,4,9), 'classifier__class_weight':['balanced', None], 'bandwidth':np.linspace(0.005, 0.15, 20)}
+            param_grid = {'classifier__C': np.logspace(-4, 4, 9), 'classifier__class_weight':['balanced', None], 'bandwidth':np.linspace(0.005, 0.15, 20)}
         else:
             param_grid = {'classifier__C': np.logspace(-4, 4, 9), 'classifier__class_weight': ['balanced', None]}
 
@@ -192,17 +214,18 @@ def experiment_pps(data, n_classes, method, method_name):
             param_grid=param_grid,
             protocol=UPP(val, repeats=100),
             n_jobs=-1,
-            refit=True,
-            verbose=False
+            refit=False,
+            verbose=True
         ).fit(dev)
         method = modsel.best_model()
-        # print(modsel.best_params_)
+        print(modsel.best_params_)
     else:
+        print('no model selection')
         method.fit(train)
-    qp.environ['SAMPLE_SIZE']=1000
-    report = qp.evaluation.evaluation_report(method, protocol=UPP(test, repeats=500), error_metrics=[qp.error.nmd, 'ae'])
+
+    report = qp.evaluation.evaluation_report(method, protocol=UPP(test, repeats=100), error_metrics=[qp.error.nmd, 'ae'], verbose=True)
     means = report.mean(numeric_only=True)
-    # print(means)
+    print(means)
 
     print(f'{method_name=} got MAE={means["ae"]:.4f} NMD={means["nmd"]:.4f}')
 
@@ -212,16 +235,16 @@ def experiment_pps(data, n_classes, method, method_name):
 
 
 def methods(base_classifier, block_ids):
-    yield 'MLPE', MaximumLikelihoodPrevalenceEstimation()
+    # yield 'MLPE', MaximumLikelihoodPrevalenceEstimation()
     # yield 'CC', CC(base_classifier)
     # yield 'PCC', PCC(base_classifier)
     # yield 'PCC-CI', AggregativeBootstrap(PCC(base_classifier), n_train_samples=50, n_test_samples=50, confidence_level=0.95)
     # yield 'bPCC', PCC(BlockEnsembleClassifier(base_classifier, blocks_ids=block_ids))
     # yield 'ACC', ACC(base_classifier)
     yield 'PACC', PACC(base_classifier)
-    yield 'EMQ', EMQ(base_classifier)
+    # yield 'EMQ', EMQ(base_classifier)
     # yield 'EMQ-cal', EMQ(CalibratedClassifierCV(base_classifier))
-    yield 'KDEy-ML', KDEyML(base_classifier)
+    # yield 'KDEy-ML', KDEyML(base_classifier)
     # yield 'KDEy-CS', KDEyCS(base_classifier)
     # yield 'KDEy-HD', KDEyHD(base_classifier)
 
@@ -268,8 +291,8 @@ if __name__ == '__main__':
     for dataset_name, n_classes in product(dataset_names, n_classes_list):
         print(f'running {dataset_name=} {n_classes}')
         data_old = load_dataset(join('../datasets/old_features', f'{dataset_name}_dataset'), n_classes=n_classes, filter_out_multiple_subreddits=False, filter_abandoned_activity=False)
-        data_new = load_dataset(join('../datasets/new_features', f'{dataset_name}_dataset'), n_classes=n_classes, filter_out_multiple_subreddits=False, filter_abandoned_activity=False)
-        data = merge_data(data_old, data_new)
-        # data = data_new
+        # data_new = load_dataset(join('../datasets/new_features', f'{dataset_name}_dataset'), n_classes=n_classes, filter_out_multiple_subreddits=False, filter_abandoned_activity=False)
+        # data = merge_data(data_old, data_new)
+        data = data_old
         main(data, n_classes, dataset_name)
 

@@ -43,7 +43,8 @@ SUBREDDIT_NAMES = [
     ]
 
 
-def load_dataset(path, n_classes, filter_out_multiple_subreddits=False, filter_abandoned_activity=True):
+def load_dataset(path, n_classes, filter_out_multiple_subreddits=False, filter_abandoned_activity=False,
+                 features_blocks=None):
 
     # asserts
     if n_classes not in [2, 3, 5]:
@@ -120,6 +121,16 @@ def load_dataset(path, n_classes, filter_out_multiple_subreddits=False, filter_a
     prefix_idx = OrderedDict()
     for prefix in sorted(np.unique(column_prefixes)):
         prefix_idx[prefix] = np.char.startswith(column_prefixes, prefix)
+
+    # filter by feature_blocks
+    covariate_blocks = []
+    if features_blocks is not None:
+        print(f'selecting {features_blocks} from {list(prefix_idx.keys())}')
+        if isinstance(features_blocks, str):
+            features_blocks=[features_blocks]
+        for feature_block in features_blocks:
+            covariate_blocks.append(covariates[:,prefix_idx[feature_block]])
+        covariates = np.hstack(covariate_blocks)
 
     # standardize all covariates; doing this once and for all is not flawed
     # since, while quantifying a set, we assume to have access to the covariates

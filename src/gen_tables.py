@@ -88,7 +88,7 @@ if __name__ == '__main__':
     # result_dir = '../results_periods'
     # gen_tables_periods(datasets, n_classes_list, result_dir)
 
-    result_dir = '../results_global'
+    result_dir = '../results/results_global'
     gen_tables_global(datasets, n_classes_list, result_dir, '../tables/global.pdf')
 
     # result_dir = '../results_abandoned_global'
