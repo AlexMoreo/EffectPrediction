@@ -128,7 +128,7 @@ def experiment_pps_random_split(
 
     all_data = LabelledCollection(X, y, classes=classes)
     training_pool, test = all_data.split_stratified(train_prop=8000, random_state=0)
-    n_batches = 18
+    n_batches = 16
     batch_size = len(training_pool)//n_batches
     np.random.seed(0)
     random_order = np.random.permutation(len(training_pool))
