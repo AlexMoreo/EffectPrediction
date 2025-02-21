@@ -23,3 +23,9 @@ TODO:
 - Periods with history
 - Recheck classifier accuracy, and Block-PCC: the blockwise typically works slightly better in accuracy and equal or
     slightly worse in macro F1
+
+What I have done:
+- I have tried with active learning w/o success, show results
+- I have tried from some subreddits to others w/o success
+- I have tried with APP in subreddits (train and test have disjoint subreddits); doesnt work
+- I have tried with APP in subreddits (train and test have some common subreddits); doesnt work

@@ -106,12 +106,11 @@ def experiment_pps_random_split(
         dataset_name,
         n_classes,
         features,
-        min_subreddit_instances=1000,
         sample_size=500,
         result_dir='../results/random_split',
         dataset_dir='../datasets'):
 
-    config = f'min{min_subreddit_instances}_size{sample_size}'  # experiment macro setup
+    config = f'min1000_size{sample_size}'  # experiment macro setup
     result_dir=join(result_dir, config, dataset_name, f'{n_classes}_classes')
     os.makedirs(result_dir, exist_ok=True)
 
@@ -244,9 +243,11 @@ def prepare_dataset(dataset_name, n_classes, features, data_dir='../datasets'):
     return data
 
 
+
+
 if __name__ == '__main__':
-    n_classes_list = [3, 5]
-    dataset_names = ['activity', 'toxicity', 'diversity']
+    n_classes_list = [3] #5]
+    dataset_names = ['activity']#, 'toxicity', 'diversity']
     features_choice = ['old', 'new', 'both']
     all_reports = []
     for dataset_name, n_classes, features in product(dataset_names, n_classes_list, features_choice):
