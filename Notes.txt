@@ -29,3 +29,9 @@ What I have done:
 - I have tried from some subreddits to others w/o success
 - I have tried with APP in subreddits (train and test have disjoint subreddits); doesnt work
 - I have tried with APP in subreddits (train and test have some common subreddits); doesnt work
+- I have tried to distinguish between subreddits; often they are separable
+- I am running APP experiments in random splits (i.e., independent of subreddits), at increasing training sizes for
+    new, old, and both features
+
+What I can do:
+- more in-deep analysis of the feature blocks information
