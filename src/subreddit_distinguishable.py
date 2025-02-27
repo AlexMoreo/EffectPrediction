@@ -31,7 +31,7 @@ warnings.filterwarnings("ignore", category=UserWarning, module='sklearn')
 warnings.filterwarnings("ignore", category=ConvergenceWarning, module='sklearn')
 
 
-def experiment_domain_discernibility(data, n_classes, method, method_name):
+def experiment_domain_discernibility(data, n_classes):
     n_subreddits = len(data.subreddit_names)
     classes = np.arange(n_classes)
 
@@ -43,11 +43,11 @@ def experiment_domain_discernibility(data, n_classes, method, method_name):
         X = PCA(n_components=100).fit_transform(X)
 
     qp.environ['SAMPLE_SIZE'] = 500
-    alldata = LabelledCollection(X, y, classes=classes)
-    train, test = alldata.split_stratified()
-    pacc = PACC().fit(train)
-    mae = qp.evaluation.evaluate(pacc, protocol=UPP(test, repeats=100), error_metric='mae', verbose=False)
-    print(f'\tPPS w\o subreddits MAE={mae:.5f}')
+    # alldata = LabelledCollection(X, y, classes=classes)
+    # train, test = alldata.split_stratified()
+    # pacc = PACC().fit(train)
+    # mae = qp.evaluation.evaluate(pacc, protocol=UPP(test, repeats=100), error_metric='mae', verbose=False)
+    # print(f'\tPPS w\o subreddits MAE={mae:.5f}')
 
     accs = []
     for subreddit_idx in range(n_subreddits):
@@ -63,11 +63,9 @@ def experiment_domain_discernibility(data, n_classes, method, method_name):
         is_in_test = domain_classifier.predict(te.X)
         acc = (is_in_test==te.y).mean()
         f1 = f1_score(te.y, is_in_test)
-
         accs.append(acc)
 
         # quantification
-
         train = LabelledCollection(X[~in_test], y[~in_test], classes=classes)
         test  = LabelledCollection(X[in_test], y[in_test], classes=classes)
         pacc = PACC().fit(train)
@@ -111,5 +109,5 @@ if __name__ == '__main__':
         data = data_new
         base_classifier = LogisticRegression()
         for method_name, method in methods(base_classifier, data.prefix_idx):
-            results = experiment_domain_discernibility(data, n_classes, method, method_name)
+            results = experiment_domain_discernibility(data, n_classes)
 
