@@ -114,7 +114,7 @@ def methods(block_ids=None):
     yield 'EMQ', EMQ(), params_lr
     # if block_ids is not None:
     #     yield 'EMQ-b', EMQ(BlockEnsembleClassifier(LogisticRegression(), blocks_ids=block_ids, kfcv=5)), {}
-    # yield 'KDEy-ML', KDEyML(), params_kde
+    yield 'KDEy-ML', KDEyML(), params_kde
     # yield 'KDEy-CS', KDEyCS(), params_kde
     # yield 'KDEy-HD', KDEyHD(), params_kde
 
@@ -144,8 +144,8 @@ def prepare_dataset(dataset_name, n_classes, data_dir):
 
 
 if __name__ == '__main__':
-    n_classes_list = [3]
-    dataset_names = ['activity'] #, 'toxicity', 'diversity']
+    n_classes_list = [3, 5]
+    dataset_names = ['activity', 'toxicity', 'diversity']
     feature_blocks = ['all'] + FEATURE_PREFIXES
     all_reports = []
     for dataset_name, n_classes, features in product(dataset_names, n_classes_list, feature_blocks):
