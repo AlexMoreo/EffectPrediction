@@ -6,9 +6,11 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 from matplotlib.pyplot import tight_layout
+from data import FEATURE_PREFIXES
 
 pd.set_option("display.max_columns", None)
 pd.set_option("display.width", 1000)
+
 
 def plot_trend(report_list, path_name, title_suffix=''):
     df = pd.concat(report_list)
@@ -36,11 +38,11 @@ def plot_trend(report_list, path_name, title_suffix=''):
 
 
 
-outpath = '../fig/random_split/'
+outpath = '../fig/random_split_merged/'
 
-for dataset in ['activity', 'toxicity', 'diversity']:
-    for n_classes in [3, 5]:
-        result_path = f'../results/random_split/samplesize500/{dataset}/{n_classes}_classes/*.csv'
+for dataset in ['activity']:#, 'toxicity', 'diversity']:
+    for n_classes in [3]: #[3, 5]:
+        result_path = f'../results/random_split_merged/samplesize500/{dataset}/{n_classes}_classes/*.csv'
 
         reports = {}
         for csv_path in glob(result_path):
@@ -50,22 +52,22 @@ for dataset in ['activity', 'toxicity', 'diversity']:
 
         # method_names = sorted(set([method_features.split('__')[0] for method_features in reports.keys()]))
         # print(method_names)
-        method_names = ['MLPE', 'CC', 'PCC', 'ACC', 'PACC', 'EMQ', 'KDEy-ML']
+        method_names = ['MLPE', 'CC', 'PACC', 'EMQ'] #, 'PCC', 'ACC', 'PACC', 'EMQ', 'KDEy-ML']
 
         # plots for each type of features
-        for features in ['new', 'old', 'both']:
+        for features in ['all'] + FEATURE_PREFIXES: #['new', 'old', 'both']:
             path_name = join(outpath, dataset, f'{n_classes}_classes', f'{features}_features.png')
             report_list = [reports[method_name+'__'+features] for method_name in method_names]
-            # plot_trend(report_list, path_name, title_suffix=features+' features')
+            plot_trend(report_list, path_name, title_suffix=features+' features')
 
         # plot some selected methods comparing the performance with different types of features
         method_names = ['MLPE__old']
-        selected_methods_names = ['EMQ']
-        for method in selected_methods_names:
-            for features in ['new', 'old', 'both']:
-                method_names.append(f'{method}__{features}')
+        # selected_methods_names = ['EMQ']
+        # for method in selected_methods_names:
+        #     for features in ['new', 'old', 'both']:
+        #         method_names.append(f'{method}__{features}')
             # method_names.append('EMQ-b__new')
-        path_name = join(outpath, dataset, f'{n_classes}_classes', 'features_comparison.png')
-        report_list = [reports[method_name] for method_name in method_names]
-        plot_trend(report_list, path_name, title_suffix='features comparison')
+        # path_name = join(outpath, dataset, f'{n_classes}_classes', 'features_comparison.png')
+        # report_list = [reports[method_name] for method_name in method_names]
+        # plot_trend(report_list, path_name, title_suffix='features comparison')
 

@@ -13,15 +13,15 @@ THRESHOLD_2_CLASSES={
 }
 
 THRESHOLD_3_CLASSES={
-    'activity': [0.4],
-    'diversity': [0.3],
-    'toxicity': [0.4],
+    'activity': [-0.4, 0.4],
+    'diversity': [-0.3, 0.3],
+    'toxicity': [-0.4, 0.4],
 }
 
 THRESHOLD_5_CLASSES={
-    'activity': [0.2, 0.55],
-    'diversity': [0.2, 0.55],
-    'toxicity': [0.2, 0.55],
+    'activity': [-0.55, -0.2, 0.2, 0.55],
+    'diversity': [-0.55, -0.2, 0.2, 0.55],
+    'toxicity': [-0.55, -0.2, 0.2, 0.55],
 }
 
 SUBREDDIT_NAMES = [
@@ -42,9 +42,31 @@ SUBREDDIT_NAMES = [
         'soyboys'
     ]
 
+FEATURE_PREFIXES = [
+    'ACTIVITY',
+    'DEMOGRAPHIC',
+    'EMBEDDINGS',
+    'EMOTIONS',
+    'LIWC',
+    'RELATIONAL',
+    'SENTIMENT',
+    'SOC_PSY',
+    'TOXICITY',
+    'WRITING_STYLE'
+]
+
+def extract_prefixes(features):
+    import re
+    prefixes = set()
+    for feat in features:
+        match = re.match(r'^([A-Z_]+)_', feat)
+        if match:
+            prefixes.add(match.group(1))
+    return sorted(list(prefixes))
+
 
 def load_dataset(path, n_classes, filter_out_multiple_subreddits=False, filter_abandoned_activity=False,
-                 features_blocks=None):
+                 features_blocks='all'):
 
     # asserts
     if n_classes not in [2, 3, 5]:
@@ -76,6 +98,7 @@ def load_dataset(path, n_classes, filter_out_multiple_subreddits=False, filter_a
         3: THRESHOLD_3_CLASSES,
         5: THRESHOLD_5_CLASSES
     }.get(n_classes, None)
+
     assert thresholds is not None, 'unknown thresholds'
 
     threshold_values = None
@@ -85,12 +108,8 @@ def load_dataset(path, n_classes, filter_out_multiple_subreddits=False, filter_a
     assert threshold_values is not None, \
         f'unknown threshold for dataset in path {path}'
 
-    # make threshold_values symmetric and bounded by inf; e.g., [0.2, 0.55] -> [-inf, -0.55, -0.2, 0.2, 0.55, inf]
-    if n_classes in [3,5]:
-        threshold_values = sorted(threshold_values)
-        threshold_values = [-np.inf] + [-t for t in threshold_values[::-1]] + threshold_values + [np.inf]
-    elif n_classes==2:
-        threshold_values = [-np.inf] + threshold_values + [np.inf]
+    # make threshold_values bounded by inf
+    threshold_values = [-np.inf] + threshold_values + [np.inf]
     new_labels = np.arange(len(threshold_values)-1)
 
     # parsing information
@@ -105,26 +124,25 @@ def load_dataset(path, n_classes, filter_out_multiple_subreddits=False, filter_a
     for label, scores in label_scores.items():
         label_classes[label] = pd.cut(label_scores[label], bins=threshold_values, labels=new_labels, right=False).to_numpy()
 
-    n_new_covariates = 623
-    n_old_covariates = 143
+    n_covariates = 765
     n_subreddits = len(SUBREDDIT_NAMES)
-    assert len(df.columns) in [n_new_covariates+n_subreddits, n_old_covariates+n_subreddits], \
-        'unexpected number of columns'
+    assert len(df.columns) == n_covariates+n_subreddits, 'unexpected number of columns'
 
     assert all(df.columns.values[-n_subreddits:] == SUBREDDIT_NAMES), 'unexpected subreddit names'
     subreddits = df.values[:, -n_subreddits:].astype(bool).T
     covariates = df.iloc[:, :-n_subreddits].values
-    covariate_names = df.columns.values[:-n_subreddits]
+    covariate_names = df.columns.values[:-n_subreddits].astype(str)
 
     # get the feature blocks ids and prefixes
-    column_prefixes = [n.split('_')[0] for n in covariate_names]
+    column_prefixes = extract_prefixes(covariate_names)
+    assert column_prefixes == FEATURE_PREFIXES, 'unexpected feature prefixes'
     prefix_idx = OrderedDict()
-    for prefix in sorted(np.unique(column_prefixes)):
-        prefix_idx[prefix] = np.char.startswith(column_prefixes, prefix)
+    for prefix in sorted(column_prefixes):
+        prefix_idx[prefix] = np.char.startswith(covariate_names, prefix)
 
     # filter by feature_blocks
     covariate_blocks = []
-    if features_blocks is not None:
+    if features_blocks != 'all':
         print(f'selecting {features_blocks} from {list(prefix_idx.keys())}')
         if isinstance(features_blocks, str):
             features_blocks=[features_blocks]
@@ -154,43 +172,7 @@ def load_dataset(path, n_classes, filter_out_multiple_subreddits=False, filter_a
     return data
 
 
-def merge_data(data_1, data_2):
-    def _sort_bunch_by_author(data):
-        order = np.argsort(data.authors)
-        return Bunch(
-            X=data.X[order],
-            y=data.y[order],
-            authors=data.authors[order],
-            scores=data.scores[order],
-            y_periods=data.y_periods.T[order].T,
-            scores_periods=data.scores_periods.T[order].T,
-            covariate_names=data.covariate_names,
-            subreddit_names=data.subreddit_names,
-            subreddits=data.subreddits.T[order].T,
-            prefix_idx=data.prefix_idx
-        )
-
-    assert sorted(data_1.authors) == sorted(data_2.authors), 'different authors'
-    data_1 = _sort_bunch_by_author(data_1)
-    data_2 = _sort_bunch_by_author(data_2)
-    return Bunch(
-        X=np.hstack([data_1.X, data_2.X]),
-        y=data_1.y,
-        authors=data_1.authors,
-        scores=data_1.scores,
-        y_periods=data_1.y_periods,
-        scores_periods=data_1.scores_periods,
-        covariate_names=data_1.covariate_names,
-        subreddit_names=data_1.subreddit_names,
-        subreddits=data_1.subreddits,
-        prefix_idx=data_1.prefix_idx
-    )
-
-
 if __name__ == '__main__':
-    print('EN DATA!')
-    path = '../datasets/old_features/activity_dataset'
-    data_old = load_dataset(path, n_classes=5, filter_abandoned_activity=False)
-    path = '../datasets/new_features/activity_dataset'
-    data_new = load_dataset(path, n_classes=5, filter_abandoned_activity=False)
-    merge_data(data_old, data_new)
+    path = '../datasets/merged_features/activity_dataset'
+    data = load_dataset(path, n_classes=5, filter_abandoned_activity=False, features_blocks='all')
+    print(data.X.shape)
