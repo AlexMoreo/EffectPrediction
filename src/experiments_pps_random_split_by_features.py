@@ -1,4 +1,5 @@
 import os
+import argparse
 import pickle
 from os.path import join
 from itertools import product
@@ -55,7 +56,7 @@ def experiment_pps_random_split(
     random_order = np.random.permutation(len(training_pool))
 
     all_reports=[]
-    for method_name, method, param_grid in methods(data.prefix_idx):
+    for method_name, method, param_grid in select(methods(data.prefix_idx)):
         report_path = join(result_dir, f'{method_name}__{feature_names}.csv')
         print(report_path)
         if os.path.exists(report_path):
@@ -101,6 +102,12 @@ def experiment_pps_random_split(
     return all_reports
 
 
+def select(methods):
+    for method_name, method, params in methods:
+        if args.method=='all' or method_name in args.method:
+            yield method_name, method, params
+
+
 def methods(block_ids=None):
     params_lr = {'classifier__C': np.logspace(-4, 4, 9), 'classifier__class_weight': ['balanced', None]}
     params_kde = {**params_lr, 'bandwidth': np.linspace(0.005, 0.15, 20)}
@@ -144,6 +151,11 @@ def prepare_dataset(dataset_name, n_classes, data_dir):
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description="Launch feature test for effect prediction.")
+    parser.add_argument('--method', type=str, default='all', help='Name of the method to use')
+
+    args = parser.parse_args()
+
     n_classes_list = [3, 5]
     dataset_names = ['activity', 'toxicity', 'diversity']
     feature_blocks = ['all'] + FEATURE_PREFIXES
