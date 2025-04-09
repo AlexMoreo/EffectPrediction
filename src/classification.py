@@ -12,7 +12,7 @@ import numpy as np
 from sklearn import clone
 import quapy.functional as F
 
-from data import load_dataset, merge_data
+# from data import load_dataset, merge_data
 
 
 # from statsmodels.miscmodels.ordinal_model import OrderedModel

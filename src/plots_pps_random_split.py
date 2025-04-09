@@ -7,67 +7,121 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from matplotlib.pyplot import tight_layout
 from data import FEATURE_PREFIXES
+import numpy as np
+
+from submodules.result_table.src.new_table import LatexTable
 
 pd.set_option("display.max_columns", None)
 pd.set_option("display.width", 1000)
 
 
-def plot_trend(report_list, path_name, title_suffix=''):
+def plot_trend(report_list, path_name, dataset, n_classes, plotsize, legend, title=''):
     df = pd.concat(report_list)
 
     print(df)
 
-    df["method_features"] = df["method"] + " (" + df["features"] + ")"
+    df["method_features"] = df["method"] #+ " (" + df["features"] + ")"
     df["method_features"] = df["method_features"].str.replace(r"MLPE .*", "MLPE", regex=True)
+
+    print(df)
 
     sns.set(style="whitegrid")
 
-    plt.figure(figsize=(10, 6))
+    plt.figure(figsize=plotsize)
     sns.lineplot(data=df, x="tr_size", y="nmd", hue="method_features", marker="o", palette="tab10")
 
     plt.xlabel("Training Size")
     plt.ylabel("NMD Error")
-    plt.title(f"{dataset} ({n_classes} classes) "+title_suffix)
+    plt.title(title)
 
-    plt.legend(title="Method (Features)", loc='upper left', bbox_to_anchor=(1,1))
+    if legend:
+        plt.legend(title="Method", loc='upper left', bbox_to_anchor=(1,1))
+    else:
+        plt.legend().remove()
+    plt.ylim(0.05,0.3)
 
     plt.tight_layout()
     os.makedirs(pathlib.Path(path_name).parent, exist_ok=True)
     plt.savefig(path_name)
 
 
+def compute_AUC(report_list, dataset):
+    df = pd.concat(report_list)
+    assert len(df.method.unique())==1, 'unexpected data'
+
+    auc_dict = []
+    for features in df.features.unique():
+        df_sel = df[df['features']==features]
+        mean_nmd_df = df_sel.groupby(['method', 'tr_size'])['nmd'].mean().reset_index()
+
+        for method, group in mean_nmd_df.groupby('method'):
+            x = group['tr_size'].values
+            y = group['nmd'].values
+
+            sorted_idx = np.argsort(x)
+            x_sorted = x[sorted_idx]
+            y_sorted = y[sorted_idx]
+            auc = np.trapz(y_sorted, x_sorted)
+            auc_dict.append({'features': features, 'auc': auc, 'dataset':dataset})
+
+    auc_df = pd.DataFrame(auc_dict)
+    return auc_df
 
 
-outpath = '../fig/random_split_merged/'
+def generate_trends(method_names, out_dir='../fig/random_split_merged/'):
 
-for dataset in ['activity']:#, 'toxicity', 'diversity']:
-    for n_classes in [3]: #[3, 5]:
+    for dataset in ['activity', 'toxicity', 'diversity']:
+        for n_classes in [5]: #[3, 5]:
+            result_path = f'../results/random_split_merged/samplesize500/{dataset}/{n_classes}_classes/*.csv'
+
+            reports = {}
+            for csv_path in glob(result_path):
+                method_features = pathlib.Path(csv_path).name.replace('.csv', '')
+                method_name = method_features.split('__')[0]
+                if method_name in method_names:
+                    df = pd.read_csv(csv_path, index_col=0)
+                    reports[method_features]=df
+
+            # plots for each type of features
+            for features in ['all'] + FEATURE_PREFIXES:
+                path_name = join(out_dir, dataset, f'{n_classes}_classes', f'{features}_features.png')
+                report_list = [reports[method_name+'__'+(features if method_name!='MLPE' else 'all')] for method_name in method_names]
+
+                plotsize = (5,5)
+                legend = False
+                if features=='all':
+                    plotsize = (10, 5)
+                    legend = True
+
+                plot_trend(report_list, path_name, dataset, n_classes, plotsize, legend, title=features)
+                # auc_df.append(compute_AUC(report_list, dataset))
+
+def generate_auc(method, n_classes=5, out_dir='../tables'):
+    auc_df = []
+    for dataset in ['activity', 'toxicity', 'diversity']:
         result_path = f'../results/random_split_merged/samplesize500/{dataset}/{n_classes}_classes/*.csv'
 
-        reports = {}
+        reports = []
         for csv_path in glob(result_path):
             method_features = pathlib.Path(csv_path).name.replace('.csv', '')
-            df = pd.read_csv(csv_path, index_col=0)
-            reports[method_features]=df
+            method_name = method_features.split('__')[0]
+            if method_name==method:
+                df = pd.read_csv(csv_path, index_col=0)
+                reports.append(df)
 
-        # method_names = sorted(set([method_features.split('__')[0] for method_features in reports.keys()]))
-        # print(method_names)
-        method_names = ['MLPE', 'CC', 'PACC', 'EMQ'] #, 'PCC', 'ACC', 'PACC', 'EMQ', 'KDEy-ML']
+        auc_df.append(compute_AUC(reports, dataset))
 
-        # plots for each type of features
-        for features in ['all'] + FEATURE_PREFIXES: #['new', 'old', 'both']:
-            path_name = join(outpath, dataset, f'{n_classes}_classes', f'{features}_features.png')
-            report_list = [reports[method_name+'__'+features] for method_name in method_names]
-            plot_trend(report_list, path_name, title_suffix=features+' features')
+    path_name = join(out_dir, f'auc_features_{method}_{n_classes}_classes.pdf')
 
-        # plot some selected methods comparing the performance with different types of features
-        method_names = ['MLPE__old']
-        # selected_methods_names = ['EMQ']
-        # for method in selected_methods_names:
-        #     for features in ['new', 'old', 'both']:
-        #         method_names.append(f'{method}__{features}')
-            # method_names.append('EMQ-b__new')
-        # path_name = join(outpath, dataset, f'{n_classes}_classes', 'features_comparison.png')
-        # report_list = [reports[method_name] for method_name in method_names]
-        # plot_trend(report_list, path_name, title_suffix='features comparison')
+    df = pd.concat(auc_df)
+    table = LatexTable.from_dataframe(df, method='features', benchmark='dataset', value='auc')
+    table.format.configuration.show_std = False
+    table.format.configuration.stat_test = None
+    table.name = f'{method}-{n_classes}classes'
+    table.latexPDF(path_name)
 
+
+if __name__ == '__main__':
+    method_names = ['MLPE', 'CC', 'PACC', 'EMQ']
+    generate_trends(method_names)
+    generate_auc(method='EMQ', n_classes=5)

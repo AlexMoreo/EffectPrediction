@@ -15,10 +15,28 @@ from sklearn.decomposition import PCA
 from sklearn.linear_model import LogisticRegression
 
 import data
+from classification import BlockEnsembleClassifier
 from data import load_dataset, FEATURE_PREFIXES
 from quapy.error import ae, nmd
 from quapy.evaluation import evaluation_report
 
+
+def load_data(dataset_dir, dataset_name, n_classes, features, n_batches):
+    data = load_dataset(f'{dataset_dir}/{dataset_name}_dataset', n_classes=n_classes, features_blocks=features)
+    classes = np.arange(n_classes)
+
+    X = data.X
+    y = data.y
+    # X = PCA(n_components=100).fit_transform(X)
+
+    all_data = LabelledCollection(X, y, classes=classes)
+    training_pool, test = all_data.split_stratified(train_prop=8000, random_state=0)
+
+    batch_size = len(training_pool) // n_batches
+    np.random.seed(0)
+    random_order = np.random.permutation(len(training_pool))
+
+    return training_pool, test, batch_size, random_order, classes, data.prefix_idx
 
 
 def experiment_pps_random_split(
@@ -35,33 +53,32 @@ def experiment_pps_random_split(
 
     qp.environ['SAMPLE_SIZE'] = sample_size
 
-    # load data
-    data = load_dataset(f'{dataset_dir}/{dataset_name}_dataset', n_classes=n_classes, features_blocks=features)
     if isinstance(features, str):
         feature_names = features
     else: # list of feature names
         feature_names = '--'.join(features)
 
-    classes = np.arange(n_classes)
-
-    X = data.X
-    y = data.y
-    # X = PCA(n_components=100).fit_transform(X)
-
-    all_data = LabelledCollection(X, y, classes=classes)
-    training_pool, test = all_data.split_stratified(train_prop=8000, random_state=0)
-    n_batches = 16
-    batch_size = len(training_pool)//n_batches
-    np.random.seed(0)
-    random_order = np.random.permutation(len(training_pool))
+    # load data
+    training_pool, test = None, None  # lazy load
+    n_batches=16
 
     all_reports=[]
-    for method_name, method, param_grid in select(methods(data.prefix_idx)):
+    for method_name in select_methods():
+
+        if method_name == 'MLPE' and features!='all':
+            continue
+
         report_path = join(result_dir, f'{method_name}__{feature_names}.csv')
         print(report_path)
         if os.path.exists(report_path):
             method_report = qp.util.load_report(report_path)
         else:
+            if training_pool is None:
+                training_pool, test, batch_size, random_order, classes, blocks_ids \
+                    = load_data(dataset_dir, dataset_name, n_classes, features, n_batches)
+
+            method, param_grid = new_method(method_name, blocks_ids)
+
             trainsize_reports = []
             for batch in range(n_batches):
                 tr_selection = random_order[:(batch+1)*batch_size]
@@ -102,28 +119,29 @@ def experiment_pps_random_split(
     return all_reports
 
 
-def select(methods):
-    for method_name, method, params in methods:
-        if args.method=='all' or method_name in args.method:
-            yield method_name, method, params
+def select_methods():
+    if args.method == 'all':
+        return ['MLPE', 'CC', 'PACC', 'EMQ'] #, 'KDEy-ML']
+    else:
+        return [args.method]
 
 
-def methods(block_ids=None):
+def new_method(method_name, blocks_ids=None):
     params_lr = {'classifier__C': np.logspace(-4, 4, 9), 'classifier__class_weight': ['balanced', None]}
     params_kde = {**params_lr, 'bandwidth': np.linspace(0.005, 0.15, 20)}
 
-    yield 'MLPE', MLPE(), {}
-    yield 'CC', CC(), params_lr
-    # yield 'PCC', PCC(), params_lr
-    # yield 'bPCC', PCC(BlockEnsembleClassifier(base_classifier, blocks_ids=block_ids)), params_lr
-    # yield 'ACC', ACC(), params_lr
-    yield 'PACC', PACC(), params_lr
-    yield 'EMQ', EMQ(), params_lr
-    # if block_ids is not None:
-    #     yield 'EMQ-b', EMQ(BlockEnsembleClassifier(LogisticRegression(), blocks_ids=block_ids, kfcv=5)), {}
-    yield 'KDEy-ML', KDEyML(), params_kde
-    # yield 'KDEy-CS', KDEyCS(), params_kde
-    # yield 'KDEy-HD', KDEyHD(), params_kde
+    factory = {
+        'MLPE': (MLPE(), {}),
+        'CC': (CC(), params_lr),
+        'PACC': (PACC(), params_lr),
+        'EMQ': (EMQ(), params_lr),
+        'EMQ-b': (EMQ(BlockEnsembleClassifier(LogisticRegression(), blocks_ids=blocks_ids, kfcv=5)), {}),
+        'KDEy-ML': (KDEyML(), params_kde)
+    }
+    if method_name not in factory:
+        raise ValueError(f'unknown method; valid ones are {factory.keys()}')
+
+    return factory[method_name]
 
 
 def show_results_random_split(reports:pd.DataFrame):
