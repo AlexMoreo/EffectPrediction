@@ -6,16 +6,16 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 from matplotlib.pyplot import tight_layout
-from data import FEATURE_GROUP_PREFIXES
+from data import FEATURE_GROUP_PREFIXES, FEATURE_SUBGROUP_PREFIXES
 import numpy as np
 
-from submodules.result_table.src.new_table import LatexTable
+from result_table.src.new_table import LatexTable
 
 pd.set_option("display.max_columns", None)
 pd.set_option("display.width", 1000)
 
 
-def plot_trend(report_list, path_name, dataset, n_classes, plotsize, legend, title=''):
+def plot_trend_by_methods(report_list, path_name, dataset, n_classes, plotsize, legend, title=''):
     df = pd.concat(report_list)
 
     print(df)
@@ -36,6 +36,39 @@ def plot_trend(report_list, path_name, dataset, n_classes, plotsize, legend, tit
 
     if legend:
         plt.legend(title="Method", loc='upper left', bbox_to_anchor=(1,1))
+    else:
+        plt.legend().remove()
+    plt.ylim(0.05,0.3)
+
+    plt.tight_layout()
+    os.makedirs(pathlib.Path(path_name).parent, exist_ok=True)
+    plt.savefig(path_name)
+
+
+def plot_trend_by_feats(report_list, path_name, dataset, n_classes, plotsize, legend, title='', sel_method=None):
+    df = pd.concat(report_list)
+
+    if sel_method is not None:
+        df = df[df.method==sel_method]
+
+    print(df)
+
+    # df["method_features"] = df["method"] #+ " (" + df["features"] + ")"
+    # df["method_features"] = df["method_features"].str.replace(r"MLPE .*", "MLPE", regex=True)
+
+    print(df)
+
+    sns.set(style="whitegrid")
+
+    plt.figure(figsize=plotsize)
+    sns.lineplot(data=df, x="tr_size", y="nmd", hue="features", marker="o", palette="tab10")
+
+    plt.xlabel("Training Size")
+    plt.ylabel("NMD Error")
+    plt.title(title)
+
+    if legend:
+        plt.legend(title="Features", loc='upper left', bbox_to_anchor=(1,1))
     else:
         plt.legend().remove()
     plt.ylim(0.05,0.3)
@@ -82,19 +115,39 @@ def generate_trends(method_names, out_dir='../fig/random_split_features/'):
                     df = pd.read_csv(csv_path, index_col=0)
                     reports[method_features]=df
 
-            # plots for each type of features
-            for features in ['all'] + FEATURE_GROUP_PREFIXES:
+            plotsize = (15, 8)
+            legend = True
+
+            # generates a dedicated plot for each type of feature, confronting different methods
+            for features in ['all']: # + FEATURE_GROUP_PREFIXES: # + FEATURE_SUBGROUP_PREFIXES:
                 path_name = join(out_dir, dataset, f'{n_classes}_classes', f'{features}_features.png')
                 report_list = [reports[method_name+'__'+(features if method_name!='MLPE' else 'all')] for method_name in method_names]
 
-                plotsize = (5,5)
-                legend = False
-                if features=='all':
-                    plotsize = (10, 5)
-                    legend = True
+                # plotsize = (5,5)
+                # legend = False
+                # if features=='all':
+                #     plotsize = (10, 5)
+                #     legend = True
 
-                plot_trend(report_list, path_name, dataset, n_classes, plotsize, legend, title=features)
-                # auc_df.append(compute_AUC(report_list, dataset))
+                plot_trend_by_methods(report_list, path_name, dataset, n_classes, plotsize, legend, title=features)
+
+            # generates a dedicated plot for each method, confronting different types of features
+
+            for method in ['EMQ']:
+                if method == 'MLPE': continue
+
+                path_name = join(out_dir, dataset, f'{n_classes}_classes', f'{method}.png')
+                features = ['all'] + FEATURE_GROUP_PREFIXES
+                report_list = [reports[method + '__' + feat] for feat in features]
+                plot_trend_by_feats(report_list, path_name, dataset, n_classes, plotsize, legend, title=features, sel_method=method)
+
+                for feat_block in features:
+                    if feat_block == 'all':
+                        continue
+                    path_name = join(out_dir, dataset, f'{n_classes}_classes', f'{method}__{feat_block}.png')
+                    feat_subgroups = [feat_block] + [f for f in FEATURE_SUBGROUP_PREFIXES if f.startswith(feat_block)]
+                    report_list = [reports[method + '__' + feat] for feat in feat_subgroups]
+                    plot_trend_by_feats(report_list, path_name, dataset, n_classes, plotsize, legend, title=features, sel_method=method)
 
 def generate_auc(method, n_classes=5, out_dir='../tables'):
     auc_df = []
@@ -122,9 +175,6 @@ def generate_auc(method, n_classes=5, out_dir='../tables'):
 
 
 if __name__ == '__main__':
-    from submodules.result_table.src.new_table import LatexTable
-    a = LatexTable()
-
     method_names = ['MLPE', 'CC', 'EMQ']
     generate_trends(method_names)
-    generate_auc(method='EMQ', n_classes=5)
+    # generate_auc(method='EMQ', n_classes=5)

@@ -133,7 +133,7 @@ def new_method(method_name, blocks_ids=None):
     factory = {
         'MLPE': (MLPE(), {}),
         'CC': (CC(), params_lr),
-        #'PACC': (PACC(), params_lr),
+        'PACC': (PACC(), params_lr),
         'EMQ': (EMQ(), params_lr),
         #'EMQ-b': (EMQ(BlockEnsembleClassifier(LogisticRegression(), blocks_ids=blocks_ids, kfcv=5)), {}),
         #'KDEy-ML': (KDEyML(), params_kde)
