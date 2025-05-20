@@ -42,30 +42,103 @@ SUBREDDIT_NAMES = [
         'soyboys'
     ]
 
-FEATURE_PREFIXES = [
-    'ACTIVITY',
-    'DEMOGRAPHIC',
-    'EMBEDDINGS',
-    'EMOTIONS',
-    'LIWC',
-    'RELATIONAL',
-    'SENTIMENT',
-    'SOC_PSY',
-    'TOXICITY',
-    'WRITING_STYLE'
+FEATURE_GROUP_PREFIXES = [
+    'ACTIVITY', 'EMBEDDINGS', 'EMOTIONS', 'LIWC', 'RELATIONAL', 'SENTIMENT', 'SOC_PSY', 'TOXICITY', 'WRITING_STYLE'
 ]
 
-def extract_prefixes(features):
-    import re
-    prefixes = set()
+FEATURE_SUBGROUP_PREFIXES = ['ACTIVITY--COMMENTS',
+ 'ACTIVITY--MENTIONS_LINKS',
+ 'ACTIVITY--SUBMISSIONS',
+ 'ACTIVITY--TIME',
+ 'ACTIVITY--TRENDS',
+ 'EMBEDDINGS--HIDDEN',
+ 'EMOTIONS--EIL',
+ 'EMOTIONS--EMOSCORES',
+ 'EMOTIONS--VAD',
+ 'LIWC--AFFECT',
+ 'LIWC--BIO',
+ 'LIWC--COGNITION',
+ 'LIWC--CONVERSATION',
+ 'LIWC--CULTURE',
+ 'LIWC--DRIVES',
+ 'LIWC--LIFESTYLE',
+ 'LIWC--LINGUISTIC',
+ 'LIWC--MOTIVATION',
+ 'LIWC--PUNCTUATION',
+ 'LIWC--SOCIAL',
+ 'LIWC--SPATIAL',
+ 'LIWC--SUMMARY',
+ 'LIWC--TEMPORAL',
+ 'RELATIONAL--AUTHORS',
+ 'RELATIONAL--ENGAGEMENT',
+ 'RELATIONAL--SUBR',
+ 'RELATIONAL--THREADS',
+ 'SENTIMENT--CPD',
+ 'SENTIMENT--NEG',
+ 'SENTIMENT--NEG-EMOJI',
+ 'SENTIMENT--NEU',
+ 'SENTIMENT--NEU-EMOJI',
+ 'SENTIMENT--POS',
+ 'SENTIMENT--POS-EMOJI',
+ 'SENTIMENT--SENT-EMOJI',
+ 'SOC_PSY--AUTHORITY',
+ 'SOC_PSY--DEMOGRAPHIC',
+ 'SOC_PSY--FAIRNESS',
+ 'SOC_PSY--GENERAL',
+ 'SOC_PSY--HARM',
+ 'SOC_PSY--INGROUP',
+ 'SOC_PSY--OCEAN',
+ 'SOC_PSY--PURITY',
+ 'TOXICITY--ID-ATTACK',
+ 'TOXICITY--INSULT',
+ 'TOXICITY--OBSCENE',
+ 'TOXICITY--SEVERE-TOXICITY',
+ 'TOXICITY--THREAT',
+ 'TOXICITY--TOXICITY',
+ 'WRITING_STYLE--ADPOSITIONS',
+ 'WRITING_STYLE--ADV',
+ 'WRITING_STYLE--ADVERBS',
+ 'WRITING_STYLE--ARTICLES',
+ 'WRITING_STYLE--AUX',
+ 'WRITING_STYLE--CONG',
+ 'WRITING_STYLE--DET',
+ 'WRITING_STYLE--FLESCH-KINKAID',
+ 'WRITING_STYLE--INTJ',
+ 'WRITING_STYLE--IRONY',
+ 'WRITING_STYLE--NER',
+ 'WRITING_STYLE--NOUNS',
+ 'WRITING_STYLE--NOVELTY',
+ 'WRITING_STYLE--PRON',
+ 'WRITING_STYLE--PRONOUNS',
+ 'WRITING_STYLE--PROPN',
+ 'WRITING_STYLE--SCONJ',
+ 'WRITING_STYLE--SMOG',
+ 'WRITING_STYLE--SPELL_ERRORS',
+ 'WRITING_STYLE--STOPWORDS',
+ 'WRITING_STYLE--SYM',
+ 'WRITING_STYLE--VERB',
+ 'WRITING_STYLE--VERBS']
+
+def extract_prefixes(features, level=0):
+    # FEATGROUP__FEATSUBGROUP__FEATID
+    # level=0  -> list of distinct FEATGROUP
+    # level=1  -> list of distinct FEATGROUP--FEATSUBGROUP
+    # level=2  -> list of distinct FEATGROUP__FEATSUBGROUP__FEATID
+    assert level in [0,1,2], 'unexpected level; use 0 for group, 1 for subgroup, 2 for featID'
+    parts = set()
     for feat in features:
-        match = re.match(r'^([A-Z_]+)_', feat)
-        if match:
-            prefixes.add(match.group(1))
-    return sorted(list(prefixes))
+        split_parts = feat.split('--')
+        assert len(split_parts) == 3, f'unexpected covariate name "{feat}"'
+        part_route = '--'.join(split_parts[:level+1])
+        parts.add(part_route)
+
+    return sorted(parts)
 
 
-def load_dataset(path, n_classes, filter_out_multiple_subreddits=False, filter_abandoned_activity=False,
+def load_dataset(path,
+                 n_classes,
+                 filter_out_multiple_subreddits=False,
+                 filter_abandoned_activity=False,
                  features_blocks='all'):
 
     # asserts
@@ -131,11 +204,21 @@ def load_dataset(path, n_classes, filter_out_multiple_subreddits=False, filter_a
     assert all(df.columns.values[-n_subreddits:] == SUBREDDIT_NAMES), 'unexpected subreddit names'
     subreddits = df.values[:, -n_subreddits:].astype(bool).T
     covariates = df.iloc[:, :-n_subreddits].values
+    df.columns = df.columns.str.replace(r"^EMBEDDINGS_", "EMBEDDINGS--HIDDEN--DIM", regex=True)  # this group did not follow the convention <father>--<soon>--<featID>
     covariate_names = df.columns.values[:-n_subreddits].astype(str)
 
     # get the feature blocks ids and prefixes
-    column_prefixes = extract_prefixes(covariate_names)
-    assert column_prefixes == FEATURE_PREFIXES, 'unexpected feature prefixes'
+    if features_blocks == 'all':
+        level = 0
+    elif isinstance(features_blocks, str):
+        level = features_blocks.count('--')
+    else: # is a list of feature blocks
+        levels = list(set([feat_block.count('--') for feat_block in features_blocks]))
+        assert len(levels)==1, 'mix of hierarchies from blocks not implemented'
+        level = levels[0]
+
+    column_prefixes = extract_prefixes(covariate_names, level=level)
+    print(column_prefixes)
     prefix_idx = OrderedDict()
     for prefix in sorted(column_prefixes):
         prefix_idx[prefix] = np.char.startswith(covariate_names, prefix)
@@ -173,6 +256,6 @@ def load_dataset(path, n_classes, filter_out_multiple_subreddits=False, filter_a
 
 
 if __name__ == '__main__':
-    path = '../datasets/merged_features/activity_dataset'
-    data = load_dataset(path, n_classes=5, filter_abandoned_activity=False, features_blocks='all')
+    path = '../datasets/activity_dataset'
+    data = load_dataset(path, n_classes=5, filter_abandoned_activity=False, features_blocks=['ACTIVITY--TRENDS', 'EMOTIONS--EIL'])
     print(data.X.shape)

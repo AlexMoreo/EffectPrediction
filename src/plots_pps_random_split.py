@@ -6,7 +6,7 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 from matplotlib.pyplot import tight_layout
-from data import FEATURE_PREFIXES
+from data import FEATURE_GROUP_PREFIXES
 import numpy as np
 
 from submodules.result_table.src.new_table import LatexTable
@@ -68,11 +68,11 @@ def compute_AUC(report_list, dataset):
     return auc_df
 
 
-def generate_trends(method_names, out_dir='../fig/random_split_merged/'):
+def generate_trends(method_names, out_dir='../fig/random_split_features/'):
 
     for dataset in ['activity', 'toxicity', 'diversity']:
         for n_classes in [5]: #[3, 5]:
-            result_path = f'../results/random_split_merged/samplesize500/{dataset}/{n_classes}_classes/*.csv'
+            result_path = f'../results/random_split_features/samplesize500/{dataset}/{n_classes}_classes/*.csv'
 
             reports = {}
             for csv_path in glob(result_path):
@@ -83,7 +83,7 @@ def generate_trends(method_names, out_dir='../fig/random_split_merged/'):
                     reports[method_features]=df
 
             # plots for each type of features
-            for features in ['all'] + FEATURE_PREFIXES:
+            for features in ['all'] + FEATURE_GROUP_PREFIXES:
                 path_name = join(out_dir, dataset, f'{n_classes}_classes', f'{features}_features.png')
                 report_list = [reports[method_name+'__'+(features if method_name!='MLPE' else 'all')] for method_name in method_names]
 
@@ -99,7 +99,7 @@ def generate_trends(method_names, out_dir='../fig/random_split_merged/'):
 def generate_auc(method, n_classes=5, out_dir='../tables'):
     auc_df = []
     for dataset in ['activity', 'toxicity', 'diversity']:
-        result_path = f'../results/random_split_merged/samplesize500/{dataset}/{n_classes}_classes/*.csv'
+        result_path = f'../results/random_split_features/samplesize500/{dataset}/{n_classes}_classes/*.csv'
 
         reports = []
         for csv_path in glob(result_path):
@@ -122,6 +122,9 @@ def generate_auc(method, n_classes=5, out_dir='../tables'):
 
 
 if __name__ == '__main__':
-    method_names = ['MLPE', 'CC', 'PACC', 'EMQ']
+    from submodules.result_table.src.new_table import LatexTable
+    a = LatexTable()
+
+    method_names = ['MLPE', 'CC', 'EMQ']
     generate_trends(method_names)
     generate_auc(method='EMQ', n_classes=5)

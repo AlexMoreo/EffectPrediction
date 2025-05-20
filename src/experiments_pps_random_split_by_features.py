@@ -16,7 +16,7 @@ from sklearn.linear_model import LogisticRegression
 
 import data
 from classification import BlockEnsembleClassifier
-from data import load_dataset, FEATURE_PREFIXES
+from data import load_dataset, FEATURE_GROUP_PREFIXES
 from quapy.error import ae, nmd
 from quapy.evaluation import evaluation_report
 
@@ -44,8 +44,8 @@ def experiment_pps_random_split(
         n_classes,
         sample_size=500,
         features='all',
-        result_dir='../results/random_split_merged',
-        dataset_dir='../datasets/merged_features'):
+        result_dir='../results/random_split_features',
+        dataset_dir='../datasets'):
 
     config = f'samplesize{sample_size}'  # experiment macro setup
     result_dir=join(result_dir, config, dataset_name, f'{n_classes}_classes')
@@ -56,7 +56,7 @@ def experiment_pps_random_split(
     if isinstance(features, str):
         feature_names = features
     else: # list of feature names
-        feature_names = '--'.join(features)
+        feature_names = '___'.join(features)
 
     # load data
     training_pool, test = None, None  # lazy load
@@ -88,7 +88,7 @@ def experiment_pps_random_split(
                 if len(param_grid)==0:
                     method.fit(train)
                 else:
-                    devel, validation = train.split_stratified()
+                    devel, validation = train.split_stratified(random_state=0)
                     model_selection = GridSearchQ(
                         model=method,
                         param_grid=param_grid,
@@ -121,7 +121,7 @@ def experiment_pps_random_split(
 
 def select_methods():
     if args.method == 'all':
-        return ['MLPE', 'CC', 'PACC', 'EMQ'] #, 'KDEy-ML']
+        return ['MLPE', 'CC', 'EMQ'] #, 'PACC', 'KDEy-ML']
     else:
         return [args.method]
 
@@ -133,10 +133,10 @@ def new_method(method_name, blocks_ids=None):
     factory = {
         'MLPE': (MLPE(), {}),
         'CC': (CC(), params_lr),
-        'PACC': (PACC(), params_lr),
+        #'PACC': (PACC(), params_lr),
         'EMQ': (EMQ(), params_lr),
-        'EMQ-b': (EMQ(BlockEnsembleClassifier(LogisticRegression(), blocks_ids=blocks_ids, kfcv=5)), {}),
-        'KDEy-ML': (KDEyML(), params_kde)
+        #'EMQ-b': (EMQ(BlockEnsembleClassifier(LogisticRegression(), blocks_ids=blocks_ids, kfcv=5)), {}),
+        #'KDEy-ML': (KDEyML(), params_kde)
     }
     if method_name not in factory:
         raise ValueError(f'unknown method; valid ones are {factory.keys()}')
@@ -174,9 +174,9 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    n_classes_list = [3, 5]
+    n_classes_list = [5] # [3, 5]
     dataset_names = ['activity', 'toxicity', 'diversity']
-    feature_blocks = ['all'] + FEATURE_PREFIXES
+    feature_blocks = ['all'] + FEATURE_GROUP_PREFIXES + data.FEATURE_SUBGROUP_PREFIXES
     all_reports = []
     for dataset_name, n_classes, features in product(dataset_names, n_classes_list, feature_blocks):
         reports = experiment_pps_random_split(dataset_name, n_classes, features=features)
