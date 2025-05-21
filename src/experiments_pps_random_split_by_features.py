@@ -121,7 +121,7 @@ def experiment_pps_random_split(
 
 def select_methods():
     if args.method == 'all':
-        return ['MLPE', 'CC', 'EMQ'] #, 'PACC', 'KDEy-ML']
+        return ['MLPE', 'CC', 'PACC', 'EMQ'] #, 'KDEy-ML']
     else:
         return [args.method]
 

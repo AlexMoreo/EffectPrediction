@@ -9,7 +9,7 @@ from matplotlib.pyplot import tight_layout
 from data import FEATURE_GROUP_PREFIXES, FEATURE_SUBGROUP_PREFIXES
 import numpy as np
 
-from result_table.src.new_table import LatexTable
+from new_table import LatexTable
 
 pd.set_option("display.max_columns", None)
 pd.set_option("display.width", 1000)
@@ -78,7 +78,7 @@ def plot_trend_by_feats(report_list, path_name, dataset, n_classes, plotsize, le
     plt.savefig(path_name)
 
 
-def compute_AUC(report_list, dataset):
+def compute_AUC__depr(report_list, dataset):
     df = pd.concat(report_list)
     assert len(df.method.unique())==1, 'unexpected data'
 
@@ -95,7 +95,40 @@ def compute_AUC(report_list, dataset):
             x_sorted = x[sorted_idx]
             y_sorted = y[sorted_idx]
             auc = np.trapz(y_sorted, x_sorted)
-            auc_dict.append({'features': features, 'auc': auc, 'dataset':dataset})
+
+
+
+    auc_df = pd.DataFrame(auc_dict)
+    return auc_df
+
+def compute_AUC(report_list, dataset):
+    df = pd.concat(report_list)
+    assert len(df.method.unique())==1, 'unexpected number of methods'
+    datasets = df.dataset.unique()
+    assert len(datasets) == 1, 'unexpected number of datasets'
+    assert datasets[0] == dataset, 'unexpected dataset'
+
+    auc_dict = []
+    for features in df.features.unique():
+        df_sel = df[df['features']==features]
+
+        grouped = df_sel.groupby('tr_size', sort=True)['nmd'].mean().reset_index()
+        tr_size = grouped['tr_size'].tolist()
+        nmd_means = grouped['nmd'].tolist()
+        auc = np.trapz(y=nmd_means, x=tr_size)
+
+        if features == 'all':
+            father, soon = 'root', 'all'
+        elif '--' in features:
+            father, soon = features.split('--')
+        else:
+            father, soon = 'root', features
+
+        auc_dict.append({'features': features, 'father': father, 'soon': soon, 'auc': auc, 'dataset': dataset})
+
+        # adds a duplicate that serves as a reference method for the children
+        if father=='root' and soon != 'all':
+            auc_dict.append({'features': features, 'father': soon, 'soon': soon + " (full)", 'auc': auc, 'dataset': dataset})
 
     auc_df = pd.DataFrame(auc_dict)
     return auc_df
@@ -132,7 +165,6 @@ def generate_trends(method_names, out_dir='../fig/random_split_features/'):
                 plot_trend_by_methods(report_list, path_name, dataset, n_classes, plotsize, legend, title=features)
 
             # generates a dedicated plot for each method, confronting different types of features
-
             for method in ['EMQ']:
                 if method == 'MLPE': continue
 
@@ -150,7 +182,7 @@ def generate_trends(method_names, out_dir='../fig/random_split_features/'):
                     plot_trend_by_feats(report_list, path_name, dataset, n_classes, plotsize, legend, title=features, sel_method=method)
 
 def generate_auc(method, n_classes=5, out_dir='../tables'):
-    auc_df = []
+    auc_df_by_dataset = []
     for dataset in ['activity', 'toxicity', 'diversity']:
         result_path = f'../results/random_split_features/samplesize500/{dataset}/{n_classes}_classes/*.csv'
 
@@ -162,19 +194,27 @@ def generate_auc(method, n_classes=5, out_dir='../tables'):
                 df = pd.read_csv(csv_path, index_col=0)
                 reports.append(df)
 
-        auc_df.append(compute_AUC(reports, dataset))
+        auc_df = compute_AUC(reports, dataset)
+        auc_df_by_dataset.append(auc_df)
 
-    path_name = join(out_dir, f'auc_features_{method}_{n_classes}_classes.pdf')
+    final_df = pd.concat(auc_df_by_dataset)
 
-    df = pd.concat(auc_df)
-    table = LatexTable.from_dataframe(df, method='features', benchmark='dataset', value='auc')
-    table.format.configuration.show_std = False
-    table.format.configuration.stat_test = None
-    table.name = f'{method}-{n_classes}classes'
-    table.latexPDF(path_name)
+    tables = []
+    for father in final_df.father.unique():
+        auc_sel_df = final_df[final_df.father==father]
+
+        table = LatexTable.from_dataframe(auc_sel_df, method='soon', benchmark='dataset', value='auc', name=father)
+        table.format.configuration.show_std = False
+        table.format.configuration.stat_test = None
+        table.format.configuration.side_columns = True
+        table.name = f'{method}-{n_classes}classes'
+        tables.append(table)
+
+    pdf_path_name = join(out_dir, f'auc_features_{method}_{n_classes}_classes.pdf')
+    LatexTable.LatexPDF(pdf_path=pdf_path_name, tables=tables, dedicated_pages=False)
 
 
 if __name__ == '__main__':
-    method_names = ['MLPE', 'CC', 'EMQ']
-    generate_trends(method_names)
-    # generate_auc(method='EMQ', n_classes=5)
+    method_names = ['MLPE', 'CC', 'PACC', 'EMQ']
+    # generate_trends(method_names)
+    generate_auc(method='EMQ', n_classes=5)
