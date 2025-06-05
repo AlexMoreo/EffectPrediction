@@ -1,11 +1,10 @@
-# from submodules.result_table.src.table import Table
 from itertools import product
 from glob import glob
 from os.path import join
 import pickle
 from pathlib import Path
 import pandas as pd
-from submodules.result_table.src.table import Table
+
 
 
 pd.set_option("display.max_columns", None)

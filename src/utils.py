@@ -205,3 +205,13 @@ if __name__ == '__main__':
             # print(mmd_rbf(a, b))  # 0.5822
             # mmd = mmd_blocks(a, b, slices=[slice(0,2),slice(2,3)], gammas = 1.)
             # print(mmd)
+
+
+def AUC_from_result_df(result_df, logscale=False):
+    grouped = result_df.groupby('tr_size', sort=True)['nmd'].mean().reset_index()
+    tr_size = grouped['tr_size'].tolist()
+    nmd_means = grouped['nmd'].tolist()
+    auc = np.trapz(y=nmd_means, x=tr_size)
+    if logscale:
+        auc = np.log(auc)
+    return auc

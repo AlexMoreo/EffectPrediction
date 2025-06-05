@@ -119,20 +119,34 @@ FEATURE_SUBGROUP_PREFIXES = ['ACTIVITY--COMMENTS',
  'WRITING_STYLE--VERB',
  'WRITING_STYLE--VERBS']
 
-def extract_prefixes(features, level=0):
+def extract_prefixes(features, covariate_names, level=0):
     # FEATGROUP__FEATSUBGROUP__FEATID
     # level=0  -> list of distinct FEATGROUP
     # level=1  -> list of distinct FEATGROUP--FEATSUBGROUP
-    # level=2  -> list of distinct FEATGROUP__FEATSUBGROUP__FEATID
+    # level=2  -> list of distinct FEATGROUP--FEATSUBGROUP--FEATID
     assert level in [0,1,2], 'unexpected level; use 0 for group, 1 for subgroup, 2 for featID'
     parts = set()
     for feat in features:
         split_parts = feat.split('--')
         assert len(split_parts) == 3, f'unexpected covariate name "{feat}"'
         part_route = '--'.join(split_parts[:level+1])
+        if level<2:
+            # bugfix: the prefixes in level==1 are not unique, e.g., 'WRITING_STYLE--PRON', 'WRITING_STYLE--PRONOUNS'
+            part_route+='--'  # this forces the prefix to be compared entirely
         parts.add(part_route)
 
-    return sorted(parts)
+    prefixes = sorted(parts)
+
+    prefix_idx = OrderedDict()
+    for prefix in sorted(prefixes):
+        prefix_key = prefix
+        if prefix_key.endswith('--'):
+            # bugfix: removes the additional '--' if any
+            prefix_key = prefix_key[:-2]
+        prefix_idx[prefix_key] = np.char.startswith(covariate_names, prefix)
+
+    return prefix_idx
+
 
 
 def load_dataset(path,
@@ -217,11 +231,7 @@ def load_dataset(path,
         assert len(levels)==1, 'mix of hierarchies from blocks not implemented'
         level = levels[0]
 
-    column_prefixes = extract_prefixes(covariate_names, level=level)
-    print(column_prefixes)
-    prefix_idx = OrderedDict()
-    for prefix in sorted(column_prefixes):
-        prefix_idx[prefix] = np.char.startswith(covariate_names, prefix)
+    prefix_idx = extract_prefixes(covariate_names, covariate_names, level=level)
 
     # filter by feature_blocks
     covariate_blocks = []

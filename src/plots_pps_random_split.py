@@ -5,11 +5,10 @@ from glob import glob
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
-from matplotlib.pyplot import tight_layout
 from data import FEATURE_GROUP_PREFIXES, FEATURE_SUBGROUP_PREFIXES
-import numpy as np
 
 from new_table import LatexTable
+from utils import AUC_from_result_df
 
 pd.set_option("display.max_columns", None)
 pd.set_option("display.width", 1000)
@@ -78,29 +77,6 @@ def plot_trend_by_feats(report_list, path_name, dataset, n_classes, plotsize, le
     plt.savefig(path_name)
 
 
-def compute_AUC__depr(report_list, dataset):
-    df = pd.concat(report_list)
-    assert len(df.method.unique())==1, 'unexpected data'
-
-    auc_dict = []
-    for features in df.features.unique():
-        df_sel = df[df['features']==features]
-        mean_nmd_df = df_sel.groupby(['method', 'tr_size'])['nmd'].mean().reset_index()
-
-        for method, group in mean_nmd_df.groupby('method'):
-            x = group['tr_size'].values
-            y = group['nmd'].values
-
-            sorted_idx = np.argsort(x)
-            x_sorted = x[sorted_idx]
-            y_sorted = y[sorted_idx]
-            auc = np.trapz(y_sorted, x_sorted)
-
-
-
-    auc_df = pd.DataFrame(auc_dict)
-    return auc_df
-
 def compute_AUC(report_list, dataset):
     df = pd.concat(report_list)
     assert len(df.method.unique())==1, 'unexpected number of methods'
@@ -111,11 +87,7 @@ def compute_AUC(report_list, dataset):
     auc_dict = []
     for features in df.features.unique():
         df_sel = df[df['features']==features]
-
-        grouped = df_sel.groupby('tr_size', sort=True)['nmd'].mean().reset_index()
-        tr_size = grouped['tr_size'].tolist()
-        nmd_means = grouped['nmd'].tolist()
-        auc = np.trapz(y=nmd_means, x=tr_size)
+        auc = AUC_from_result_df(df_sel)
 
         if features == 'all':
             father, soon = 'root', 'all'
