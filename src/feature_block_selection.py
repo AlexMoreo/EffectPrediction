@@ -90,17 +90,17 @@ def evaluate_candidates(contributing_features, selection_code, method, dataset_n
 def write_exploration_report(report_path, contributing_features, final_score, all_score, best_path):
     rel_err_reduction = 100*(all_score-final_score)/all_score
     with open(report_path, 'wt') as foo:
-        foo.write(f'Summary')
-        foo.write(f'dataset={dataset_name}')
-        foo.write(f'n_classes={n_classes}')
-        foo.write(f'method={method}')
-        foo.write(f'contributing features:')
+        foo.write(f'Summary\n')
+        foo.write(f'dataset={dataset_name}\n')
+        foo.write(f'n_classes={n_classes}\n')
+        foo.write(f'method={method}\n')
+        foo.write(f'contributing features:\n')
         for f in contributing_features:
-            foo.write(f'\t{f}')
-        foo.write(f'reference score (all features) is {all_score:.5f}')
-        foo.write(f'final score={final_score:.5f}')
-        foo.write(f'rel improvement={rel_err_reduction:.5f}')
-        foo.write(f'best configuration path={best_path}')
+            foo.write(f'\t{f}\n')
+        foo.write(f'reference score (all features) is {all_score:.5f}\n')
+        foo.write(f'final score={final_score:.5f}\n')
+        foo.write(f'rel improvement={rel_err_reduction:.5f}\n')
+        foo.write(f'best configuration path={best_path}\n')
 
 
 if __name__ == '__main__':
@@ -112,7 +112,7 @@ if __name__ == '__main__':
     dataset_dir = '../datasets'
 
     n_classes_list = [5]
-    dataset_names = ['activity'] #, 'toxicity', 'diversity']
+    dataset_names = ['activity', 'toxicity', 'diversity']
     feature_blocks = FEATURE_SUBGROUP_PREFIXES
     method = 'EMQ'
 
