@@ -58,8 +58,8 @@ def experiment_pps_random_split_all_methods(
             method_name,
             sample_size,
             features,
-            result_dir,
-            dataset_dir
+            result_dir=result_dir,
+            dataset_dir=dataset_dir
         )
         all_reports.append(report)
     return all_reports
@@ -142,86 +142,6 @@ def experiment_pps_random_split_refactor(
         method_report.to_csv(report_path)
 
     return method_report, report_path
-
-
-# def experiment_pps_random_split(
-#         dataset_name,
-#         n_classes,
-#         sample_size=500,
-#         features='all',
-#         result_dir='../results/random_split_features',
-#         dataset_dir='../datasets'):
-#
-#     config = f'samplesize{sample_size}'  # experiment macro setup
-#     result_dir=join(result_dir, config, dataset_name, f'{n_classes}_classes')
-#     os.makedirs(result_dir, exist_ok=True)
-#
-#     qp.environ['SAMPLE_SIZE'] = sample_size
-#
-#     if isinstance(features, str):
-#         feature_names = features
-#     else: # list of feature names
-#         feature_names = '___'.join(features)
-#
-#     # load data
-#     training_pool, test = None, None  # lazy load
-#     n_batches=16
-#
-#     all_reports=[]
-#     for method_name in select_methods():
-#
-#         if method_name == 'MLPE' and features!='all':
-#             continue
-#
-#         report_path = join(result_dir, f'{method_name}__{feature_names}.csv')
-#         print(report_path)
-#         if os.path.exists(report_path):
-#             method_report = qp.util.load_report(report_path)
-#         else:
-#             if training_pool is None:
-#                 training_pool, test, batch_size, random_order, classes, blocks_ids \
-#                     = load_data(dataset_dir, dataset_name, n_classes, features, n_batches)
-#
-#             method, param_grid = new_method(method_name, blocks_ids)
-#
-#             trainsize_reports = []
-#             for batch in range(n_batches):
-#                 tr_selection = random_order[:(batch+1)*batch_size]
-#                 train = training_pool.sampling_from_index(tr_selection)
-#
-#                 # model training
-#                 if len(param_grid)==0:
-#                     method.fit(train)
-#                 else:
-#                     devel, validation = train.split_stratified(random_state=0)
-#                     model_selection = GridSearchQ(
-#                         model=method,
-#                         param_grid=param_grid,
-#                         protocol=UPP(validation, repeats=250),
-#                         n_jobs=-1,
-#                         refit=True,
-#                         verbose=False
-#                     ).fit(devel)
-#                     method = model_selection.best_model()
-#
-#                 # model test
-#                 test_protocol = UPP(test, repeats=1000)
-#
-#                 report = evaluation_report(method, protocol=test_protocol, error_metrics=[nmd, ae], verbose=False)
-#                 report['method'] = method_name
-#                 report['tr_size'] = len(train)
-#                 report['features'] = features
-#                 report['dataset'] = dataset_name
-#                 report['n_classes'] = n_classes
-#                 trainsize_reports.append(report)
-#                 print(f'\ttrain-size={len(train)} got mae={report.mean(numeric_only=True)["ae"]:.3f}')
-#
-#             method_report = pd.concat(trainsize_reports)
-#             method_report.to_csv(report_path)
-#
-#         all_reports.append(method_report)
-#
-#     return all_reports
 
 
 def select_methods():

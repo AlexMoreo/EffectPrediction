@@ -46,7 +46,7 @@ FEATURE_GROUP_PREFIXES = [
     'ACTIVITY', 'EMBEDDINGS', 'EMOTIONS', 'LIWC', 'RELATIONAL', 'SENTIMENT', 'SOC_PSY', 'TOXICITY', 'WRITING_STYLE'
 ]
 
-FEATURE_SUBGROUP_PREFIXES = ['ACTIVITY--COMMENTS',
+FEATURE_SUBGROUP_PREFIXES_depr = ['ACTIVITY--COMMENTS',
  'ACTIVITY--MENTIONS_LINKS',
  'ACTIVITY--SUBMISSIONS',
  'ACTIVITY--TIME',
@@ -118,6 +118,75 @@ FEATURE_SUBGROUP_PREFIXES = ['ACTIVITY--COMMENTS',
  'WRITING_STYLE--SYM',
  'WRITING_STYLE--VERB',
  'WRITING_STYLE--VERBS']
+
+FEATURE_SUBGROUP_PREFIXES = ['ACTIVITY--COMMENTS',
+     'ACTIVITY--MENTIONS_LINKS',
+     'ACTIVITY--SUBMISSIONS',
+     'ACTIVITY--TIME',
+     'ACTIVITY--TRENDS',
+     'EMOTIONS--EIL',
+     'EMOTIONS--EMOSCORES',
+     'EMOTIONS--VAD',
+     'LIWC--AFFECT',
+     'LIWC--BIO',
+     'LIWC--COGNITION',
+     'LIWC--CONVERSATION',
+     'LIWC--CULTURE',
+     'LIWC--DRIVES',
+     'LIWC--LIFESTYLE',
+     'LIWC--LINGUISTIC',
+     'LIWC--MOTIVATION',
+     'LIWC--PUNCTUATION',
+     'LIWC--SOCIAL',
+     'LIWC--SPATIAL',
+     'LIWC--SUMMARY',
+     'LIWC--TEMPORAL',
+     'RELATIONAL--AUTHORS',
+     'RELATIONAL--ENGAGEMENT',
+     'RELATIONAL--SUBR',
+     'RELATIONAL--THREADS',
+     'SENTIMENT--CPD',
+     'SENTIMENT--NEG',
+     'SENTIMENT--NEG-EMOJI',
+     'SENTIMENT--NEU',
+     'SENTIMENT--NEU-EMOJI',
+     'SENTIMENT--POS',
+     'SENTIMENT--POS-EMOJI',
+     'SENTIMENT--SENT-EMOJI',
+     'SOC_PSY--AUTHORITY',
+     'SOC_PSY--DEMOGRAPHIC',
+     'SOC_PSY--FAIRNESS',
+     'SOC_PSY--GENERAL',
+     'SOC_PSY--HARM',
+     'SOC_PSY--INGROUP',
+     'SOC_PSY--OCEAN',
+     'SOC_PSY--PURITY',
+     'TOXICITY--ID-ATTACK',
+     'TOXICITY--INSULT',
+     'TOXICITY--OBSCENE',
+     'TOXICITY--SEVERE-TOXICITY',
+     'TOXICITY--THREAT',
+     'TOXICITY--TOXICITY',
+     'WRITING_STYLE--ADPOSITIONS',
+     'WRITING_STYLE--ADV',
+     'WRITING_STYLE--ARTICLES',
+     'WRITING_STYLE--AUX',
+     'WRITING_STYLE--CONG',
+     'WRITING_STYLE--DET',
+     'WRITING_STYLE--FLESCH-KINKAID',
+     'WRITING_STYLE--INTJ',
+     'WRITING_STYLE--IRONY',
+     'WRITING_STYLE--NER',
+     'WRITING_STYLE--NOUNS',
+     'WRITING_STYLE--NOVELTY',
+     'WRITING_STYLE--PRON',
+     'WRITING_STYLE--PROPN',
+     'WRITING_STYLE--SCONJ',
+     'WRITING_STYLE--SMOG',
+     'WRITING_STYLE--SPELL_ERRORS',
+     'WRITING_STYLE--STOPWORDS',
+     'WRITING_STYLE--SYM',
+     'WRITING_STYLE--VERB']
 
 def extract_prefixes(features, covariate_names, level=0):
     # FEATGROUP__FEATSUBGROUP__FEATID
@@ -211,7 +280,7 @@ def load_dataset(path,
     for label, scores in label_scores.items():
         label_classes[label] = pd.cut(label_scores[label], bins=threshold_values, labels=new_labels, right=False).to_numpy()
 
-    n_covariates = 765
+    n_covariates = 753
     n_subreddits = len(SUBREDDIT_NAMES)
     assert len(df.columns) == n_covariates+n_subreddits, 'unexpected number of columns'
 
@@ -267,5 +336,5 @@ def load_dataset(path,
 
 if __name__ == '__main__':
     path = '../datasets/activity_dataset'
-    data = load_dataset(path, n_classes=5, filter_abandoned_activity=False, features_blocks=['ACTIVITY--TRENDS', 'EMOTIONS--EIL'])
+    data = load_dataset(path, n_classes=5, filter_abandoned_activity=False)
     print(data.X.shape)
