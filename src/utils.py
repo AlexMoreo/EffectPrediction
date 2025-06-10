@@ -140,71 +140,71 @@ def mmd_pairwise_rbf_blocks_pval(Xs, blocks_idx, gammas=1.):
             mmd_pvals[j, i] = pval
     return mmd_matrix, mmd_pvals
 
-if __name__ == '__main__':
-    import numpy as np
-    from time import time
-
-    from data import load_dataset
-    from classification import separate_blocks_idx
-
-    path = '../datasets/activity_dataset'
-
-    print('loading dataset...')
-    cov_names, covariates, labels, subreddits_names, subreddits = load_dataset(path, with_periods=True)
-    column_prefixes, prefix_idx = separate_blocks_idx(cov_names)
-    blocks_idx = prefix_idx.values()
-    X, y = covariates, labels
-    n_subreddits = len(subreddits_names)
-
-    for i in range(n_subreddits-1):
-        for j in range(i+1, n_subreddits):
-            X1 = X[subreddits[:,i].astype(bool)]
-            X2 = X[subreddits[:,j].astype(bool)]
-
-            # print('start')
-            #
-            # tinit = time()
-            # print(mmd_rbf_blocks(X1, X2, blocks_idx))
-            # tend = time()-tinit
-            # print(f'took {tend}s')
-            #
-            # tinit = time()
-            # n1=X1.shape[0]
-            # m = mmd_rbf_blocks_matrix(X1, X2, blocks_idx)
-            # xx = m[:n1,:n1]
-            # yy = m[n1:, n1:]
-            # xy = m[:n1, n1:]
-            # mmd = xx.mean() + yy.mean() - 2 * xy.mean()
-            # print(f'{mmd:.5f} took {time()-tinit}s')
-
-            tinit = time()
-            mmd, pval = mmd_rbf_blocks_pval(X1, X2, blocks_idx)
-            print(f'{mmd:.5f} took {time()-tinit}s {pval=:.5f}')
-            if pval > 0.1:
-                # Fail to reject the null hypothesis, meaning we do not have enough evidence
-                # to claim that X and Y come from different distributions.
-                # In other words, X and Y could come from the same distribution,
-                # but we cannot be certain.
-                print(f'\t take {i}, {j}')
-            if pval <= 0.1:
-                # Reject the null hypothesis, meaning it is very unlikely that
-                # X and Y come from the same distribution. This suggests that
-                # there are significant differences between the distributions of X and Y.
-                pass
-
-            # print(mmd_rbf_blocks(X1, X2, blocks_idx))
-
-
-
-            # a = np.arange(1, 10).reshape(3, 3)
-            # b = [[7, 6, 5], [4, 3, 2], [1, 1, 8], [0, 2, 5]]
-            # b = np.array(b)
-            # print(a)
-            # print(b)
-            # # print(mmd_linear(a, b))  # 6.0
-            # print(mmd_rbf(a, b))  # 0.5822
-            # mmd = mmd_blocks(a, b, slices=[slice(0,2),slice(2,3)], gammas = 1.)
-            # print(mmd)
+# if __name__ == '__main__':
+#     import numpy as np
+#     from time import time
+#
+#     from data import load_dataset
+#     from classification import separate_blocks_idx
+#
+#     path = '../datasets/activity_dataset'
+#
+#     print('loading dataset...')
+#     cov_names, covariates, labels, subreddits_names, subreddits = load_dataset(path, with_periods=True)
+#     column_prefixes, prefix_idx = separate_blocks_idx(cov_names)
+#     blocks_idx = prefix_idx.values()
+#     X, y = covariates, labels
+#     n_subreddits = len(subreddits_names)
+#
+#     for i in range(n_subreddits-1):
+#         for j in range(i+1, n_subreddits):
+#             X1 = X[subreddits[:,i].astype(bool)]
+#             X2 = X[subreddits[:,j].astype(bool)]
+#
+#             # print('start')
+#             #
+#             # tinit = time()
+#             # print(mmd_rbf_blocks(X1, X2, blocks_idx))
+#             # tend = time()-tinit
+#             # print(f'took {tend}s')
+#             #
+#             # tinit = time()
+#             # n1=X1.shape[0]
+#             # m = mmd_rbf_blocks_matrix(X1, X2, blocks_idx)
+#             # xx = m[:n1,:n1]
+#             # yy = m[n1:, n1:]
+#             # xy = m[:n1, n1:]
+#             # mmd = xx.mean() + yy.mean() - 2 * xy.mean()
+#             # print(f'{mmd:.5f} took {time()-tinit}s')
+#
+#             tinit = time()
+#             mmd, pval = mmd_rbf_blocks_pval(X1, X2, blocks_idx)
+#             print(f'{mmd:.5f} took {time()-tinit}s {pval=:.5f}')
+#             if pval > 0.1:
+#                 # Fail to reject the null hypothesis, meaning we do not have enough evidence
+#                 # to claim that X and Y come from different distributions.
+#                 # In other words, X and Y could come from the same distribution,
+#                 # but we cannot be certain.
+#                 print(f'\t take {i}, {j}')
+#             if pval <= 0.1:
+#                 # Reject the null hypothesis, meaning it is very unlikely that
+#                 # X and Y come from the same distribution. This suggests that
+#                 # there are significant differences between the distributions of X and Y.
+#                 pass
+#
+#             # print(mmd_rbf_blocks(X1, X2, blocks_idx))
+#
+#
+#
+#             # a = np.arange(1, 10).reshape(3, 3)
+#             # b = [[7, 6, 5], [4, 3, 2], [1, 1, 8], [0, 2, 5]]
+#             # b = np.array(b)
+#             # print(a)
+#             # print(b)
+#             # # print(mmd_linear(a, b))  # 6.0
+#             # print(mmd_rbf(a, b))  # 0.5822
+#             # mmd = mmd_blocks(a, b, slices=[slice(0,2),slice(2,3)], gammas = 1.)
+#             # print(mmd)
 
 
 def AUC_from_result_df(result_df, logscale=False):

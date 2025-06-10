@@ -22,7 +22,7 @@ from quapy.error import ae, nmd
 from quapy.evaluation import evaluation_report
 
 
-def load_data(dataset_dir, dataset_name, n_classes, features, n_batches):
+def load_data(dataset_dir, dataset_name, n_classes, features, n_batches, seed=0):
     data = load_dataset(f'{dataset_dir}/{dataset_name}_dataset', n_classes=n_classes, features_blocks=features)
     classes = np.arange(n_classes)
 
@@ -34,7 +34,7 @@ def load_data(dataset_dir, dataset_name, n_classes, features, n_batches):
     training_pool, test = all_data.split_stratified(train_prop=8000, random_state=0)
 
     batch_size = len(training_pool) // n_batches
-    np.random.seed(0)
+    np.random.seed(seed)
     random_order = np.random.permutation(len(training_pool))
 
     return training_pool, test, batch_size, random_order, classes, data.prefix_idx
@@ -52,7 +52,7 @@ def experiment_pps_random_split_all_methods(
     for method_name in select_methods():
         if method_name == 'MLPE' and features != 'all':
             continue
-        report, _ = experiment_pps_random_split_refactor(
+        report, _ = experiment_label_shift(
             dataset_name,
             n_classes,
             method_name,
@@ -65,7 +65,7 @@ def experiment_pps_random_split_all_methods(
     return all_reports
 
 
-def experiment_pps_random_split_refactor(
+def experiment_label_shift(
         dataset_name,
         n_classes,
         method_name,
@@ -73,7 +73,9 @@ def experiment_pps_random_split_refactor(
         features='all',
         features_short_id=None,
         result_dir='../results/random_split_features',
-        dataset_dir='../datasets'):
+        dataset_dir='../datasets',
+        n_runs=5
+):
 
     qp.environ['SAMPLE_SIZE'] = sample_size
     result_dir = get_full_path(result_dir, dataset_name, n_classes, sample_size)
@@ -92,7 +94,6 @@ def experiment_pps_random_split_refactor(
         features_short_id = feature_names
 
     # load data
-    training_pool, test = None, None  # lazy load
     n_batches=16
 
     report_path = join(result_dir, f'{method_name}__{features_short_id}.csv')
@@ -100,43 +101,45 @@ def experiment_pps_random_split_refactor(
     if os.path.exists(report_path):
         method_report = qp.util.load_report(report_path)
     else:
-        if training_pool is None:
-            training_pool, test, batch_size, random_order, classes, blocks_ids \
-                = load_data(dataset_dir, dataset_name, n_classes, features, n_batches)
-
-        method, param_grid = new_method(method_name, blocks_ids)
-
         trainsize_reports = []
-        for batch in range(n_batches):
-            tr_selection = random_order[:(batch+1)*batch_size]
-            train = training_pool.sampling_from_index(tr_selection)
+        for run in range(n_runs):
+            print(f'Running {dataset_name} {method_name} {run=}')
+            training_pool, test, batch_size, random_order, classes, blocks_ids \
+                = load_data(dataset_dir, dataset_name, n_classes, features, n_batches, seed=run)
 
-            # model training
-            if len(param_grid)==0:
-                method.fit(train)
-            else:
-                devel, validation = train.split_stratified(random_state=0)
-                model_selection = GridSearchQ(
-                    model=method,
-                    param_grid=param_grid,
-                    protocol=UPP(validation, repeats=250),
-                    n_jobs=-1,
-                    refit=True,
-                    verbose=False
-                ).fit(devel)
-                method = model_selection.best_model()
+            method, param_grid = new_method(method_name, blocks_ids)
 
-            # model test
-            test_protocol = UPP(test, repeats=1000)
+            for batch in range(n_batches):
+                tr_selection = random_order[:(batch+1)*batch_size]
+                train = training_pool.sampling_from_index(tr_selection)
 
-            report = evaluation_report(method, protocol=test_protocol, error_metrics=[nmd, ae], verbose=False)
-            report['method'] = method_name
-            report['tr_size'] = len(train)
-            report['features'] = feature_names
-            report['dataset'] = dataset_name
-            report['n_classes'] = n_classes
-            trainsize_reports.append(report)
-            print(f'\ttrain-size={len(train)} got nmd={report.mean(numeric_only=True)["nmd"]:.3f}')
+                # model training
+                if len(param_grid)==0:
+                    method.fit(train)
+                else:
+                    devel, validation = train.split_stratified(random_state=0)
+                    model_selection = GridSearchQ(
+                        model=method,
+                        param_grid=param_grid,
+                        protocol=UPP(validation, repeats=250),
+                        n_jobs=-1,
+                        refit=True,
+                        verbose=False
+                    ).fit(devel)
+                    method = model_selection.best_model()
+
+                # model test
+                test_protocol = UPP(test, repeats=1000)
+
+                report = evaluation_report(method, protocol=test_protocol, error_metrics=[nmd, ae], verbose=False)
+                report['method'] = method_name
+                report['tr_size'] = len(train)
+                report['features'] = feature_names
+                report['dataset'] = dataset_name
+                report['n_classes'] = n_classes
+                report['run'] = run
+                trainsize_reports.append(report)
+                print(f'\ttrain-size={len(train)} got nmd={report.mean(numeric_only=True)["nmd"]:.3f}')
 
         method_report = pd.concat(trainsize_reports)
         method_report.to_csv(report_path)
@@ -198,12 +201,21 @@ def prepare_dataset(dataset_name, n_classes, data_dir):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Launch feature test for effect prediction.")
     parser.add_argument('--method', type=str, default='all', help='Name of the method to use')
+    parser.add_argument('--feats', type=str, default='all',
+                        help='Feature blocks to use: all=all blocks concatenated, full= all + 1st-level + 2nd level')
 
     args = parser.parse_args()
 
-    n_classes_list = [5] # [3, 5]
+    if args.feats == 'all':
+        feature_blocks = ['all']
+    elif args.feats == 'full':
+        feature_blocks = ['all'] + FEATURE_GROUP_PREFIXES + data.FEATURE_SUBGROUP_PREFIXES
+    else:
+        raise ValueError('unrecognized --feats, valid args are "all" and "full"')
+
+    n_classes_list = [5]
     dataset_names = ['activity', 'toxicity', 'diversity']
-    feature_blocks = ['all'] + FEATURE_GROUP_PREFIXES + data.FEATURE_SUBGROUP_PREFIXES
+
     all_reports = []
     for dataset_name, n_classes, features in product(dataset_names, n_classes_list, feature_blocks):
         reports = experiment_pps_random_split_all_methods(dataset_name, n_classes, features=features)

@@ -2,13 +2,15 @@ import os
 import argparse
 from os.path import join
 from itertools import product
+from pathlib import Path
+
 import pandas as pd
 import numpy as np
 
 from commons import get_full_path, SAMPLE_SIZE
 # from classification import BlockEnsembleClassifier
 from data import load_dataset, FEATURE_SUBGROUP_PREFIXES
-from experiments_pps_random_split_by_features import experiment_pps_random_split_refactor
+from evaluate_feature_blocks import experiment_label_shift
 
 from utils import AUC_from_result_df
 
@@ -28,7 +30,7 @@ def load_precomputed_reports(result_dir, feature_blocks, dataset_name, n_classes
         result_file = join(result_dir, f'{method}__{featblock}.csv')
         assert os.path.exists(result_file), f'result file {result_file} does not exist'
         df = pd.read_csv(result_file, index_col=0)
-        auc = AUC_from_result_df(df, logscale=True)
+        auc = AUC_from_result_df(df, logscale=False)
         AUCs.append(auc)
     sorted_feats = sorted(zip(feature_blocks, AUCs), key=lambda x:x[1], reverse=True)
     print(sorted_feats)
@@ -42,7 +44,7 @@ def load_precomputed_ALL_reference(result_dir, dataset_name, n_classes, method, 
     result_file = join(result_dir, f'{method}__{feature_block}.csv')
     assert os.path.exists(result_file), f'result file {result_file} does not exist'
     df = pd.read_csv(result_file, index_col=0)
-    auc = AUC_from_result_df(df, logscale=True)
+    auc = AUC_from_result_df(df, logscale=False)
     return auc
 
 
@@ -69,12 +71,17 @@ def greedy_feature_exploration(all_score, featblock_scores_sorted, exploratory_r
         print(contributing_features)
         print(f'best {best_score}')
 
+    # replace code "2" (unexplored) with "1" (keep) in the best path prior to returning it
+    # best_path = Path(best_path)
+    # parent_dir, (method_str, code_str) = best_path.parent, best_path.name.split('__')
+    # best_path = join(parent_dir, f'{method_str}__{code_str.replace('2', '1')}')
+
     return contributing_features, best_score, best_path
 
 
 def evaluate_candidates(contributing_features, selection_code, method, dataset_name, n_classes, result_dir):
     features_short_id = ''.join([f'{v}' for v in selection_code])
-    eval_report_df, report_path = experiment_pps_random_split_refactor(
+    eval_report_df, report_path = experiment_label_shift(
         dataset_name,
         n_classes,
         method,
@@ -84,24 +91,25 @@ def evaluate_candidates(contributing_features, selection_code, method, dataset_n
         result_dir=result_dir,
         dataset_dir=dataset_dir
     )
-    candidate_score = AUC_from_result_df(eval_report_df, logscale=True)
+    candidate_score = AUC_from_result_df(eval_report_df, logscale=False)
     return candidate_score, report_path
 
 def write_exploration_report(report_path, contributing_features, final_score, all_score, best_path):
-    rel_err_reduction = 100*(all_score-final_score)/all_score
-    with open(report_path, 'wt') as foo:
-        foo.write(f'Summary\n')
-        foo.write(f'dataset={dataset_name}\n')
-        foo.write(f'n_classes={n_classes}\n')
-        foo.write(f'method={method}\n')
-        foo.write(f'contributing features:\n')
-        for f in contributing_features:
-            foo.write(f'\t{f}\n')
-        foo.write(f'reference score (all features) is {all_score:.5f}\n')
-        foo.write(f'final score={final_score:.5f}\n')
-        foo.write(f'rel improvement={rel_err_reduction:.5f}\n')
-        foo.write(f'best configuration path={best_path}\n')
+    import json
 
+    json_report={
+        'dataset':dataset_name,
+        'n_classes': n_classes,
+        'method':method,
+        'selected_features':contributing_features,
+        'reference_score': all_score,
+        'final_score':final_score,
+        'rel_err_reduction': 100 * (all_score - final_score) / all_score,
+        'best_conf_path':best_path
+    }
+
+    with open(report_path, 'w', encoding='utf-8') as foo:
+        json.dump(json_report, foo, ensure_ascii=False, indent=4)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Launch feature test for effect prediction.")
@@ -128,7 +136,7 @@ if __name__ == '__main__':
         )
 
         report_path = get_full_path(exploratory_results_dir, dataset_name, n_classes)
-        report_path = join(report_path, f'{method}_exploration.txt')
+        report_path = join(report_path, f'{method}_exploration.json')
         write_exploration_report(report_path, contributing_features, final_score, all_score, best_path)
 
 
