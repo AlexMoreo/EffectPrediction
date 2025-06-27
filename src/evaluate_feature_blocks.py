@@ -163,6 +163,7 @@ def new_method(method_name, blocks_ids=None):
         'CC': (CC(), params_lr),
         'PACC': (PACC(), params_lr),
         'EMQ': (EMQ(), params_lr),
+        # 'EMQ': (EMQ(), {}),
         # 'o-SLD': ()
         #'EMQ-b': (EMQ(BlockEnsembleClassifier(LogisticRegression(), blocks_ids=blocks_ids, kfcv=5)), {}),
         #'KDEy-ML': (KDEyML(), params_kde)
@@ -203,6 +204,8 @@ if __name__ == '__main__':
     parser.add_argument('--method', type=str, default='all', help='Name of the method to use')
     parser.add_argument('--feats', type=str, default='all',
                         help='Feature blocks to use: all=all blocks concatenated, full= all + 1st-level + 2nd level')
+    parser.add_argument('--dataset', type=str, default='all',
+                        help='Choose the dataset; set to "all" (default) for all datasets')
 
     args = parser.parse_args()
 
@@ -213,8 +216,11 @@ if __name__ == '__main__':
     else:
         raise ValueError('unrecognized --feats, valid args are "all" and "full"')
 
+    feature_blocks = feature_blocks
+
     n_classes_list = [5]
-    dataset_names = ['activity', 'toxicity', 'diversity']
+    dataset_names = ['activity', 'toxicity', 'diversity'] if args.dataset=='all' else [args.dataset]
+
 
     all_reports = []
     for dataset_name, n_classes, features in product(dataset_names, n_classes_list, feature_blocks):

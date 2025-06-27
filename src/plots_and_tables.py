@@ -21,10 +21,10 @@ pd.set_option("display.max_columns", None)
 pd.set_option("display.width", 1000)
 
 n_classes = 5
-result_dir = '../results_no_runs'
+result_dir = '../results'
 
 
-def plot_trend_by_methods(report_list, path_name, dataset, plotsize, legend, title=''):
+def plot_trend_by_methods(report_list, path_name, plotsize, legend, title=''):
     df = pd.concat(report_list)
 
     print(df)
@@ -148,7 +148,7 @@ def generate_trends_plots(method_names, out_dir='../fig/random_split_features/')
             plotsize = (15, 8)
             legend = True
 
-            plot_trend_by_methods(results, path_name, dataset, n_classes, plotsize, legend, title='Methods comparison')
+            plot_trend_by_methods(results, path_name, plotsize, legend, title='Methods comparison')
 
 
 def generate_auc_tables(method, out_dir='../tables'):
@@ -178,10 +178,13 @@ def generate_auc_tables(method, out_dir='../tables'):
         table.format.configuration.show_std = False
         table.format.configuration.stat_test = None
         table.format.configuration.side_columns = True
+        table.format.configuration.mean_prec=1
         columns = list(table.methods)
         first = [f for f in columns if '(full)' in f or f=='all']  # the father is the only one without "(full)"
         rest  = sorted([f for f in columns if f not in first])
         table.reorder_methods(first+rest)
+        for i in range(table.n_methods):
+            table.methods
         tables.append(table)
 
     pdf_path_name = join(out_dir, f'auc_features_{method}_{n_classes}_classes.pdf')
@@ -250,8 +253,11 @@ def generate_selection_table(method, out_dir='../tables'):
             feat_group_head_short = {
                 'EMOTIONS': 'EMO.',
                 'RELATIONAL': 'RELAT.',
+                'EMBEDDINGS': '',
             }.get(feat_group_head, feat_group_head)
             table_arr[i,0] = f'\multirow{{{n_rows}}}{{*}}{{{sideways(feat_group_head_short)}}}'
+            if table_arr[i,1] == 'EMBEDDINGS--HIDDEN':
+                feat_subgroup = 'EMBEDDINGS'
 
         table_arr[i, 1] = feat_subgroup
 
@@ -318,8 +324,7 @@ if __name__ == '__main__':
     baselines = ['MLPE', 'CC', 'PACC']
     method_names = baselines + [method]
 
-    # generate_trends_plots(method_names)
+    generate_trends_plots(method_names)
     generate_auc_tables(method=method)
-    # generate_selection_table(method=method)
+    generate_selection_table(method=method)
 
-    print('\n\n\nCORRECT THE PATH')
