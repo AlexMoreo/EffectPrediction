@@ -120,12 +120,14 @@ def compute_AUC(report_list, dataset):
 def load_exploration_report(method, result_dir, config_path, dataset):
     import json
 
-    result_all_features = load_precomputed_result('../results/random_split_features', dataset, n_classes=5, method=method, feature_block='all')
+    result_all_features = load_precomputed_result('../results/random_split_features', dataset,
+                                                  n_classes=5, method=method, feature_block='all')
 
     result_path = join(result_dir, 'exploration', config_path, f'{method}_exploration.json')
     with open(result_path, "r", encoding="utf-8") as f:
         exploration_data = json.load(f)
         exploration_data['reference_all_score'] = result_all_features
+        exploration_data['rel_all_err_reduction'] = 100 * (result_all_features - exploration_data['final_score']) / result_all_features
         return exploration_data
 
 
@@ -298,7 +300,7 @@ def generate_selection_table(method, out_dir='../tables'):
     ref_values_str = ' & '.join(ref_values)
     lines.append(r'\multicolumn{2}{c}{Optimized features} & '+ref_values_str+r' \\')
 
-    ref_values = [f'{exploration_reports[d]["rel_err_reduction"]:.2f}\%' for d in datasets]
+    ref_values = [f'{exploration_reports[d]["rel_all_err_reduction"]:.2f}\%' for d in datasets]
     ref_values_str = ' & '.join(ref_values)
     lines.append(r'\multicolumn{2}{c}{Rel. Error Reduction (\%)} & ' + ref_values_str + r' \\')
 
