@@ -16,6 +16,7 @@ from format import FormatModifierSelectColor
 from new_table import LatexTable, save_text
 from tools import tex_table, tex_document, latex2pdf
 from utils import AUC_from_result_df
+from feature_block_selection import load_precomputed_result
 
 pd.set_option("display.max_columns", None)
 pd.set_option("display.width", 1000)
@@ -116,12 +117,15 @@ def compute_AUC(report_list, dataset):
     return auc_df
 
 
-def load_exploration_report(method, result_dir, config_path):
+def load_exploration_report(method, result_dir, config_path, dataset):
     import json
+
+    result_all_features = load_precomputed_result('../results/random_split_features', dataset, n_classes=5, method=method, feature_block='all')
 
     result_path = join(result_dir, 'exploration', config_path, f'{method}_exploration.json')
     with open(result_path, "r", encoding="utf-8") as f:
         exploration_data = json.load(f)
+        exploration_data['reference_all_score'] = result_all_features
         return exploration_data
 
 
@@ -137,7 +141,7 @@ def generate_trends_plots(method_names, out_dir='../fig/random_split_features/')
 
             # for the selected method, it also loads the exploration report and shows the optimized features trend
             if m == method:
-                optim_path = load_exploration_report(method, result_dir, config_path)['best_conf_path']
+                optim_path = load_exploration_report(method, result_dir, config_path, dataset)['best_conf_path']
                 df = pd.read_csv(optim_path, index_col=0)
                 df['method'] = df['method'].replace('EMQ', 'EMQ optimized')
                 results.append(df)
@@ -286,7 +290,7 @@ def generate_selection_table(method, out_dir='../tables'):
 
     # add reference value (all features), optimized value, and relative error reduction
 
-    ref_values = [f'{exploration_reports[d]["reference_score"]:.3f}' for d in datasets]
+    ref_values = [f'{exploration_reports[d]["reference_all_score"]:.3f}' for d in datasets]
     ref_values_str = ' & '.join(ref_values)
     lines.append(r'\multicolumn{2}{c}{All features} & '+ref_values_str+r' \\')
 

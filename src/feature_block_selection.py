@@ -38,6 +38,7 @@ def load_precomputed_reports(result_dir, feature_blocks, dataset_name, n_classes
     sorted_feats = [f for f, auc in sorted_feats]
     return sorted_feats
 
+
 def inspect_best_configuration(result_dir, dataset_name, n_classes, method):
     # returns the best configuration (yielding the smallest AUC) for all 1st level feature groups (ACTIVITY, SENTIMENT, ...)
     results = []
@@ -48,6 +49,7 @@ def inspect_best_configuration(result_dir, dataset_name, n_classes, method):
     results = np.asarray(results)
     best_block = reference_block_names[np.argmin(results)]
     return best_block
+
 
 def load_precomputed_result(result_dir, dataset_name, n_classes, method, feature_block='all'):
     # returns the AUC for the "ALL" features setup. This is the reference value we want to beat
