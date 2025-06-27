@@ -203,7 +203,7 @@ def generate_selection_table(method, out_dir='../tables'):
     for dataset in datasets:
         config_path = f'samplesize{SAMPLE_SIZE}/{dataset}/{n_classes}_classes'
 
-        exploration_report = load_exploration_report(method, result_dir, config_path)
+        exploration_report = load_exploration_report(method, result_dir, config_path, dataset)
         selected_features[dataset] = exploration_report['selected_features']
         exploration_reports[dataset] = exploration_report
 
@@ -328,7 +328,7 @@ if __name__ == '__main__':
     baselines = ['MLPE', 'CC', 'PACC']
     method_names = baselines + [method]
 
-    generate_trends_plots(method_names)
-    generate_auc_tables(method=method)
+    #generate_trends_plots(method_names)
+    #generate_auc_tables(method=method)
     generate_selection_table(method=method)
 
