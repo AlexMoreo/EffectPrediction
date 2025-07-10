@@ -40,12 +40,12 @@ def plot_trend_by_methods(report_list, path_name, plotsize, legend, title=''):
     plt.figure(figsize=plotsize)
     sns.lineplot(data=df, x="tr_size", y="nmd", hue="method_features", marker="o", palette="tab10")
 
-    plt.xlabel("Training Size")
-    plt.ylabel("NMD Error")
+    plt.xlabel("Training size")
+    plt.ylabel("NMD error")
     plt.title(title)
 
     if legend:
-        plt.legend(title="Method", loc='upper left', bbox_to_anchor=(1,1))
+        plt.legend(loc='upper left')#, bbox_to_anchor=(1,1))
     else:
         plt.legend().remove()
     plt.ylim(0.05,0.3)
@@ -151,10 +151,10 @@ def generate_trends_plots(method_names, out_dir='../fig/random_split_features/')
 
             # generates a plot comparing the trends of all methods
             path_name = join(out_dir, f'samplesize{SAMPLE_SIZE}_{n_classes}_classes', f'{dataset}.pdf')
-            plotsize = (15, 8)
+            plotsize = (5, 5)
             legend = True
 
-            plot_trend_by_methods(results, path_name, plotsize, legend, title='Methods comparison')
+            plot_trend_by_methods(results, path_name, plotsize, legend, title=f'{dataset}')
 
 
 def generate_auc_tables(method, out_dir='../tables'):
@@ -189,8 +189,8 @@ def generate_auc_tables(method, out_dir='../tables'):
         first = [f for f in columns if '(full)' in f or f=='all']  # the father is the only one without "(full)"
         rest  = sorted([f for f in columns if f not in first])
         table.reorder_methods(first+rest)
-        for i in range(table.n_methods):
-            table.methods
+        # for i in range(table.n_methods):
+        #     table.methods
         tables.append(table)
 
     pdf_path_name = join(out_dir, f'auc_features_{method}_{n_classes}_classes.pdf')
@@ -261,7 +261,7 @@ def generate_selection_table(method, out_dir='../tables'):
                 'RELATIONAL': 'RELAT.',
                 'EMBEDDINGS': '',
             }.get(feat_group_head, feat_group_head)
-            table_arr[i,0] = f'\multirow{{{n_rows}}}{{*}}{{{sideways(feat_group_head_short)}}}'
+            table_arr[i,0] = f'\\multirow{{{n_rows}}}{{*}}{{{sideways(feat_group_head_short)}}}'
             if table_arr[i,1] == 'EMBEDDINGS--HIDDEN':
                 feat_subgroup = 'EMBEDDINGS'
 
@@ -300,7 +300,7 @@ def generate_selection_table(method, out_dir='../tables'):
     ref_values_str = ' & '.join(ref_values)
     lines.append(r'\multicolumn{2}{c}{Optimized features} & '+ref_values_str+r' \\')
 
-    ref_values = [f'{exploration_reports[d]["rel_all_err_reduction"]:.2f}\%' for d in datasets]
+    ref_values = [f'{exploration_reports[d]["rel_all_err_reduction"]:.2f}\\%' for d in datasets]
     ref_values_str = ' & '.join(ref_values)
     lines.append(r'\multicolumn{2}{c}{Rel. Error Reduction (\%)} & ' + ref_values_str + r' \\')
 
@@ -330,7 +330,7 @@ if __name__ == '__main__':
     baselines = ['MLPE', 'CC', 'PACC']
     method_names = baselines + [method]
 
-    #generate_trends_plots(method_names)
-    #generate_auc_tables(method=method)
-    generate_selection_table(method=method)
+    # generate_trends_plots(method_names)
+    generate_auc_tables(method=method)
+    # generate_selection_table(method=method)
 

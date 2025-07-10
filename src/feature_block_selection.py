@@ -61,7 +61,7 @@ def load_precomputed_result(result_dir, dataset_name, n_classes, method, feature
     return auc
 
 
-def greedy_feature_exploration(baseline_score, baseline_features, featblock_scores_sorted, n_rounds=2):
+def greedy_feature_exploration(baseline_score, baseline_features, featblock_scores_sorted, n_rounds=3):
     best_score = baseline_score
     best_path = None
     contributing_features = list(baseline_features)
