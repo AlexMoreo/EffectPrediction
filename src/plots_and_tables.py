@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 from commons import SAMPLE_SIZE
 from comparison_group import SelectByName, ColourGroup
 from data import FEATURE_GROUP_PREFIXES, FEATURE_SUBGROUP_PREFIXES
-from format import FormatModifierSelectColor
+# from format import FormatModifierSelectColor
 
 from new_table import LatexTable, save_text
 from tools import tex_table, tex_document, latex2pdf
@@ -88,7 +88,7 @@ def plot_trend_by_feats(report_list, path_name, dataset, plotsize, legend, title
     plt.savefig(path_name)
 
 
-def compute_AUC(report_list, dataset):
+def compute_AUC(report_list, dataset, add_duplicate=True):
     df = pd.concat(report_list)
     assert len(df.method.unique())==1, 'unexpected number of methods'
     datasets = df.dataset.unique()
@@ -110,7 +110,7 @@ def compute_AUC(report_list, dataset):
         auc_dict.append({'features': features, 'father': father, 'soon': soon, 'auc': auc, 'dataset': dataset})
 
         # adds a duplicate that serves as a reference method for the children
-        if father=='root' and soon != 'all':
+        if add_duplicate and father=='root' and soon != 'all':
             auc_dict.append({'features': features, 'father': soon, 'soon': soon + " (full)", 'auc': auc, 'dataset': dataset})
 
     auc_df = pd.DataFrame(auc_dict)
@@ -195,6 +195,108 @@ def generate_auc_tables(method, out_dir='../tables'):
 
     pdf_path_name = join(out_dir, f'auc_features_{method}_{n_classes}_classes.pdf')
     LatexTable.LatexPDF(pdf_path=pdf_path_name, tables=tables, dedicated_pages=False)
+
+
+def generate_featorder_table(method, out_dir='../tables/tables'):
+
+    table = {}
+    datasets = ['activity', 'toxicity', 'diversity']
+    for dataset in datasets:
+
+        feature_names = []
+        feature_aucs = []
+
+        config_path = f'samplesize{SAMPLE_SIZE}/{dataset}/{n_classes}_classes'
+        result_path = join(result_dir, 'random_split_features', config_path, f'EMQ__*.csv')
+
+        for csv_path in glob(result_path):
+            if '--' not in pathlib.Path(csv_path).name:
+                # keep only feature blocks and not feature groups nor config "all"
+                continue
+            method_features = pathlib.Path(csv_path).name.replace('.csv', '')
+            method_name, feature_name = method_features.split('__')
+            if method_name==method:
+                df = pd.read_csv(csv_path, index_col=0)
+                auc = AUC_from_result_df(df)
+                feature_name = feature_name.replace('_', r'\_').replace('--', ': ')
+                feature_names.append(feature_name)
+                feature_aucs.append(auc)
+
+        feature_names = np.asarray(feature_names)
+        feature_aucs = np.asarray(feature_aucs)
+
+        order = np.argsort(-feature_aucs)
+        feature_names = feature_names[order]
+        feature_aucs  = feature_aucs[order]
+
+        table[f'{dataset}']={'names': feature_names, 'aucs': feature_aucs}
+    print(table)
+
+    num_features = len(table[datasets[0]]['names'])
+
+    lines = []
+
+    parent_colors = {
+        r'SOC\_PSY': 'lightblue',
+        'RELATIONAL': 'lightgreen',
+        'TOXICITY': 'lightpink',
+        'EMBEDDINGS': 'lightyellow',
+        'LIWC': 'lightgray',
+        'SENTIMENT': 'lightpurple',
+        'ACTIVITY': 'lightorange',
+        r'WRITING\_STYLE': 'lightteal',
+        'EMOTIONS': 'lightred',
+    }
+
+    # fallback color if any unexpected parent name appears
+    default_color = 'white'
+
+    # Extract parent name from feature
+    def get_parent(feature_name):
+        return feature_name.split(':')[0].strip()
+
+    # Begin tabular environment with one column for rank and two for each dataset
+    lines.append(r'\begin{tabular}{c' + '|rc' * len(datasets) + '}')
+    lines.append(r'\toprule')
+
+    # First header row: dataset names as multicolumns
+    header = [r'\multicolumn{1}{c}{}']  # empty cell for rank column
+    for dataset in datasets:
+        header.append(r'\multicolumn{2}{c}{\textsc{' + dataset.capitalize() + '}}')
+    lines.append(' & '.join(header) + r' \\')
+
+    # Second header row: column names under each dataset
+    subheader = [r'\multicolumn{1}{c}{\textbf{Rank}}']
+    for _ in datasets:
+        subheader.extend([r'\multicolumn{1}{c}{\textsc{Feature name}}', r'\multicolumn{1}{c}{\textsc{AUC}}'])
+    lines.append(' & '.join(subheader) + r' \\')
+
+    lines.append(r'\midrule')
+
+    # Add the table rows with rank
+    for i in range(num_features):
+        row = [str(i + 1)]  # rank starts at 1
+        for dataset in datasets:
+            name = table[dataset]['names'][i]
+            auc = table[dataset]['aucs'][i]
+            parent = get_parent(name)
+            color = parent_colors.get(parent, default_color)
+            colored_name = r'\cellcolor{' + color + '}' + name
+            colored_auc = r'\cellcolor{' + color + '}' + f'{auc:.3f}'
+            row.extend([colored_name, colored_auc])
+        lines.append(' & '.join(row) + r' \\')
+
+    lines.append(r'\bottomrule')
+    lines.append(r'\end{tabular}')
+
+    tabular = '\n'.join(lines)
+
+    # show
+    print(tabular)
+
+    tabular_path_name = join(out_dir, f'auc_featuorder_{method}_{n_classes}_classes.tex')
+    with open(tabular_path_name, 'wt') as foo:
+        foo.write(tabular)
 
 
 def generate_selection_table(method, out_dir='../tables'):
@@ -331,6 +433,7 @@ if __name__ == '__main__':
     method_names = baselines + [method]
 
     # generate_trends_plots(method_names)
-    generate_auc_tables(method=method)
+    # generate_auc_tables(method=method)
+    generate_featorder_table(method=method)
     # generate_selection_table(method=method)
 
