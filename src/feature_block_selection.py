@@ -61,25 +61,40 @@ def load_precomputed_result(result_dir, dataset_name, n_classes, method, feature
     return auc
 
 
-def greedy_feature_exploration(baseline_score, baseline_features, featblock_scores_sorted, n_rounds=3):
+def greedy_feature_exploration(baseline_score, baseline_features, featblock_scores_sorted, n_rounds=4):
     best_score = baseline_score
     best_path = None
     contributing_features = list(baseline_features)
     n_blocks = len(featblock_scores_sorted)
     selection_code = []
+
     for round_idx in range(n_rounds):
-        selection_code += [2]*n_blocks  # 1 means the feature set has been chosen, 0 not chosen, 2 not tested
+
+        # the last round is treated differently: only ablations are tested for refinement
+        last_round = (round_idx == (n_rounds-1))
+        if not last_round:
+            # in the last round, we do not add a new block of selection code (to prevent additions being recomputed)
+            selection_code += [2]*n_blocks  # 1 means the feature set has been chosen, 0 not chosen, 2 not tested
+
+        # optimization round (ablation/addition in rounds [0,..., n_rounds-2], only ablation in round n_rounds-1)
         for i, feat_block in enumerate(featblock_scores_sorted):
-            selection_pos = n_blocks*round_idx + i
+            if last_round:
+                selection_pos = n_blocks * (round_idx - 1) + i
+            else:
+                selection_pos = n_blocks * round_idx + i
             print('deciding for feature block: ', feat_block)
 
             new_candidates = list(contributing_features)
-            if feat_block in contributing_features:
+
+            if feat_block in contributing_features: #ablation
                 # if it was present, the test consists of removing it
                 new_candidates.remove(feat_block)
                 ablated = True
                 selection_code[selection_pos] = 0
-            else:
+            else: # addition
+                if last_round: # skip addition test in last round
+                    continue
+
                 # if it was NOT present, the test consists of adding it
                 new_candidates = new_candidates + [feat_block]
                 ablated = False
