@@ -61,29 +61,35 @@ def load_precomputed_result(result_dir, dataset_name, n_classes, method, feature
     return auc
 
 
-def greedy_feature_exploration(baseline_score, baseline_features, featblock_scores_sorted, n_rounds=4):
+def greedy_feature_exploration(baseline_score, baseline_features, featblock_scores_sorted, n_rounds=3):
     best_score = baseline_score
     best_path = None
     contributing_features = list(baseline_features)
     n_blocks = len(featblock_scores_sorted)
     selection_code = []
 
-    for round_idx in range(n_rounds):
+    improvement = False
+    round_idx=0
 
-        # the last round is treated differently: only ablations are tested for refinement
-        last_round = (round_idx == (n_rounds-1))
-        if not last_round:
-            # in the last round, we do not add a new block of selection code (to prevent additions being recomputed)
+    while (round_idx < n_rounds) or improvement:
+
+        # the last rounds are treated differently: only ablations are tested for refinement until no improvement is reached
+        refinement_round = (round_idx >= n_rounds)
+        if not refinement_round:
+            # in the refinement rounds, we do not add a new block of selection code (to prevent additions being recomputed)
             selection_code += [2]*n_blocks  # 1 means the feature set has been chosen, 0 not chosen, 2 not tested
 
         # optimization round (ablation/addition in rounds [0,..., n_rounds-2], only ablation in round n_rounds-1)
+        improvement = False
         for i, feat_block in enumerate(featblock_scores_sorted):
 
-            if last_round:
-                selection_pos = n_blocks * (round_idx - 1) + i
+            if refinement_round:
+                selection_pos = n_blocks * (n_rounds - 1) + i
             else:
                 selection_pos = n_blocks * round_idx + i
-            print('deciding for feature block: ', feat_block)
+
+            print(f'[round={round_idx}/{n_rounds} {"(refinement)" if refinement_round else ""}] '
+                  f'deciding for feature block: {feat_block}')
 
             new_candidates = list(contributing_features)
 
@@ -93,7 +99,7 @@ def greedy_feature_exploration(baseline_score, baseline_features, featblock_scor
                 ablated = True
                 selection_code[selection_pos] = 0
             else: # addition
-                if last_round: # skip addition test in last round
+                if refinement_round: # skip addition test in last round
                     continue
 
                 # if it was NOT present, the test consists of adding it
@@ -109,6 +115,7 @@ def greedy_feature_exploration(baseline_score, baseline_features, featblock_scor
                 best_score = auc
                 best_path = path
                 contributing_features = new_candidates
+                improvement = True
                 # selection_code[selection_pos] = 0 if ablated else 1
                 print('keep change')
             else:
@@ -120,10 +127,15 @@ def greedy_feature_exploration(baseline_score, baseline_features, featblock_scor
             print(contributing_features)
             print(f'[{dataset_name}] {round_idx=}/{n_rounds} ({i}/{n_blocks}) best {best_score}')
 
+        round_idx+=1
+
         # replace code "2" (unexplored) with "1" (keep) in the best path prior to returning it
         # best_path = Path(best_path)
         # parent_dir, (method_str, code_str) = best_path.parent, best_path.name.split('__')
         # best_path = join(parent_dir, f'{method_str}__{code_str.replace('2', '1')}')
+
+    print(f'process ended after {round_idx} rounds, '
+          f'selected {len(contributing_features)}/{len(featblock_scores_sorted)} feature blocks')
 
     return contributing_features, best_score, best_path
 
