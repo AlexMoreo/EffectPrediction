@@ -32,6 +32,7 @@ def plot_trend_by_methods(report_list, path_name, plotsize, legend, title=''):
 
     df["method_features"] = df["method"] #+ " (" + df["features"] + ")"
     df["method_features"] = df["method_features"].str.replace(r"MLPE .*", "MLPE", regex=True)
+    df["method_features"] = df["method_features"].str.replace(r"EMQ optimized.*", "EMQO", regex=True)
 
     print(df)
 
@@ -45,7 +46,7 @@ def plot_trend_by_methods(report_list, path_name, plotsize, legend, title=''):
     plt.title(title)
 
     if legend:
-        plt.legend(loc='upper left')#, bbox_to_anchor=(1,1))
+        plt.legend(loc='upper left', bbox_to_anchor=(1,1))
     else:
         plt.legend().remove()
     plt.ylim(0.05,0.3)
@@ -133,7 +134,7 @@ def load_exploration_report(method, result_dir, config_path, dataset):
 
 def generate_trends_plots(method_names, out_dir='../fig/random_split_features/'):
 
-    for dataset in ['activity', 'toxicity', 'diversity']:
+    for idx, dataset in enumerate(['activity', 'toxicity', 'diversity']):
         config_path = f'samplesize{SAMPLE_SIZE}/{dataset}/{n_classes}_classes'
         results = []
         for m in method_names:
@@ -151,8 +152,13 @@ def generate_trends_plots(method_names, out_dir='../fig/random_split_features/')
 
             # generates a plot comparing the trends of all methods
             path_name = join(out_dir, f'samplesize{SAMPLE_SIZE}_{n_classes}_classes', f'{dataset}.pdf')
-            plotsize = (5, 5)
-            legend = True
+
+            if idx == 1: # the central figure
+                plotsize = (6, 5)
+                legend = True
+            else: #first and third figure
+                plotsize = (5, 5)
+                legend = False
 
             plot_trend_by_methods(results, path_name, plotsize, legend, title=f'{dataset}')
 
@@ -330,7 +336,7 @@ if __name__ == '__main__':
     baselines = ['MLPE', 'CC', 'PACC']
     method_names = baselines + [method]
 
-    # generate_trends_plots(method_names)
-    generate_auc_tables(method=method)
+    generate_trends_plots(method_names)
+    # generate_auc_tables(method=method)
     # generate_selection_table(method=method)
 

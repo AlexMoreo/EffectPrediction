@@ -39,7 +39,7 @@ def load_precomputed_reports(result_dir, feature_blocks, dataset_name, n_classes
     return sorted_feats
 
 
-def inspect_best_configuration(result_dir, dataset_name, n_classes, method):
+def inspect_best_departing_configuration(result_dir, dataset_name, n_classes, method):
     # returns the best configuration (yielding the smallest AUC) for all 1st level feature groups (ACTIVITY, SENTIMENT, ...)
     results = []
     reference_block_names = ['all']+FEATURE_GROUP_PREFIXES
@@ -85,11 +85,7 @@ def greedy_feature_exploration(baseline_score, baseline_features, featblock_scor
                 ablated = False
                 selection_code[selection_pos] = 1
 
-            def fake_eval():
-                return best_score + np.random.rand()-0.5, None
-
-            # auc, path = fake_eval()
-            auc, path = evaluate_candidates(new_candidates, selection_code, method, dataset_name, n_classes, exploratory_results_dir)
+            auc, path = evaluate_candidates(new_candidates, selection_code, method, dataset_name, n_classes, exploratory_results_dir, dataset_dir)
 
             print(f'after {"deleting" if ablated else "adding"} {feat_block} we got {auc:.1f} (best so far={best_score:.1f})')
             if auc < best_score:
@@ -116,7 +112,7 @@ def greedy_feature_exploration(baseline_score, baseline_features, featblock_scor
     return contributing_features, best_score, best_path
 
 
-def evaluate_candidates(contributing_features, selection_code, method, dataset_name, n_classes, result_dir):
+def evaluate_candidates(contributing_features, selection_code, method, dataset_name, n_classes, result_dir, dataset_dir):
     features_short_id = ''.join([f'{v}' for v in selection_code])
     eval_report_df, report_path = experiment_label_shift(
         dataset_name,
@@ -165,7 +161,7 @@ if __name__ == '__main__':
 
 
     for dataset_name, n_classes in product(dataset_names, n_classes_list):
-        best_block = inspect_best_configuration(precomputed_results_dir, dataset_name, n_classes, method)
+        best_block = inspect_best_departing_configuration(precomputed_results_dir, dataset_name, n_classes, method)
         baseline_features = FEATURE_HIERARCHY[best_block]
 
         baseline_score = load_precomputed_result(precomputed_results_dir, dataset_name, n_classes, method, feature_block=best_block)
