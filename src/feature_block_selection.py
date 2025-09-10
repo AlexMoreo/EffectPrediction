@@ -68,8 +68,6 @@ def greedy_feature_exploration(baseline_score, baseline_features, featblock_scor
     n_blocks = len(featblock_scores_sorted)
     selection_code = []
 
-    start_hack = False
-
     for round_idx in range(n_rounds):
 
         # the last round is treated differently: only ablations are tested for refinement
@@ -86,15 +84,6 @@ def greedy_feature_exploration(baseline_score, baseline_features, featblock_scor
             else:
                 selection_pos = n_blocks * round_idx + i
             print('deciding for feature block: ', feat_block)
-
-            if last_round:
-                if feat_block == 'SOC_PSY--FAIRNESS':
-                    start_hack = True
-                    print('HACK STARTING')
-
-                if not start_hack:
-                    print('HACK --------')
-                    continue
 
             new_candidates = list(contributing_features)
 
