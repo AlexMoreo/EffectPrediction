@@ -46,7 +46,8 @@ def plot_trend_by_methods(report_list, path_name, plotsize, legend, title=''):
     plt.title(title)
 
     if legend:
-        plt.legend(loc='upper left', bbox_to_anchor=(1,1))
+        # plt.legend(loc='upper left', bbox_to_anchor=(1,1))
+        plt.legend(loc='upper right')
     else:
         plt.legend().remove()
     plt.ylim(0.05,0.3)
@@ -154,7 +155,7 @@ def generate_trends_plots(method_names, out_dir='../fig/random_split_features/')
             path_name = join(out_dir, f'samplesize{SAMPLE_SIZE}_{n_classes}_classes', f'{dataset}.pdf')
 
             if idx == 1: # the central figure
-                plotsize = (6, 5)
+                plotsize = (5, 5)
                 legend = True
             else: #first and third figure
                 plotsize = (5, 5)

@@ -56,7 +56,7 @@ if __name__ == '__main__':
 
 
     n_classes_list = [5]
-    dataset_names = ['activity', 'toxicity', 'diversity'] if args.dataset=='all' else [args.dataset]
+    dataset_names = ['diversity', 'toxicity', 'activity' ] if args.dataset=='all' else [args.dataset]
     feature_blocks = FEATURE_SUBGROUP_PREFIXES
     method = 'EMQ'
 
