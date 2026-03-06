@@ -5,6 +5,7 @@ import os
 from sklearn.preprocessing import StandardScaler
 from sklearn.utils import Bunch
 from collections import OrderedDict
+from commons import *
 
 
 THRESHOLD_2_CLASSES={
@@ -153,11 +154,18 @@ def extract_prefixes(features, covariate_names, level=0):
 
 
 
+
+def mode(x):
+    values, counts = np.unique(x, return_counts=True)
+    return values[np.argmax(counts)]
+
 def load_dataset(path,
                  n_classes,
                  filter_out_multiple_subreddits=False,
                  filter_abandoned_activity=False,
                  features_blocks='all'):
+
+    assert GLOBAL_DISCRETIZATION_SETUP in ['fixed', 'isodense'], 'unknown discretization setup, valid ones are "fixed" and "isodense"'
 
     # asserts
     if n_classes not in [2, 3, 5]:
@@ -201,7 +209,7 @@ def load_dataset(path,
 
     # make threshold_values bounded by inf
     threshold_values = [-np.inf] + threshold_values + [np.inf]
-    new_labels = np.arange(len(threshold_values)-1)
+    new_labels = np.arange(n_classes)
 
     # parsing information
     authors = df.pop('author')  # unused
@@ -213,7 +221,14 @@ def load_dataset(path,
 
     label_classes = {}
     for label, scores in label_scores.items():
-        label_classes[label] = pd.cut(label_scores[label], bins=threshold_values, labels=new_labels, right=False).to_numpy()
+        if GLOBAL_DISCRETIZATION_SETUP=='fixed':
+            label_classes[label] = pd.cut(scores, bins=threshold_values, labels=new_labels, right=False).to_numpy()
+        elif GLOBAL_DISCRETIZATION_SETUP=='isodense':
+            label_classes[label] = pd.qcut(scores, q=n_classes, labels=False, duplicates="drop")
+            print(f'Global setup=isodense: min={np.min(scores):.3f}, max={np.max(scores):.3f}, '
+                  f'ave={np.mean(scores):.3f}, mode={mode(scores):.3f}, n_classes={np.unique(label_classes[label])}')
+        else:
+            raise ValueError(f'Global variable {GLOBAL_DISCRETIZATION_SETUP=} not recognized')
 
     n_covariates = 753
     n_subreddits = len(SUBREDDIT_NAMES)
@@ -270,6 +285,7 @@ def load_dataset(path,
 
 
 if __name__ == '__main__':
-    path = '../datasets/activity_dataset'
+    path = '../datasets/toxicity_dataset'
     data = load_dataset(path, n_classes=5, filter_abandoned_activity=False)
     print(data.X.shape)
+    print(len(set(data['y'])))

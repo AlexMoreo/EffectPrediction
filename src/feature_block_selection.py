@@ -52,7 +52,8 @@ def inspect_best_departing_configuration(result_dir, dataset_name, n_classes, me
 
 
 def load_precomputed_result(result_dir, dataset_name, n_classes, method, feature_block='all'):
-    # returns the AUC for the "ALL" features setup. This is the reference value we want to beat
+    # returns the AUC for the best feature-block setup (or "ALL" if not indicated). 
+    # This is the reference value we want to beat
     result_dir = get_full_path(result_dir, dataset_name, n_classes)
     result_file = join(result_dir, f'{method}__{feature_block}.csv')
     assert os.path.exists(result_file), f'result file {result_file} does not exist'

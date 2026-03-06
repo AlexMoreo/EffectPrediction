@@ -13,13 +13,25 @@ from quapy.model_selection import GridSearchQ
 from quapy.protocol import UPP
 from sklearn.decomposition import PCA
 from sklearn.linear_model import LogisticRegression
-
+from commons import *
 import data
-from commons import SAMPLE_SIZE, get_full_path
 # from classification import BlockEnsembleClassifier
 from data import load_dataset, FEATURE_GROUP_PREFIXES
 from quapy.error import ae, nmd
 from quapy.evaluation import evaluation_report
+
+
+"""
+This script evaluates feature blocks and stores results in disc, so they are available as pre-computed
+resources for other scripts.
+
+The options include:
+- "all" (which evaluates all features together)
+- "groups" (which evaluates all features together, plus each group independently)
+- "full" (which evaluates all features together, plus each group independently, plus each subgroup independently)
+
+The idea is to use the pre-computed results for performing the feature block greedy selection (feature_block_selection.py)
+"""
 
 
 def load_data(dataset_dir, dataset_name, n_classes, features, n_batches, seed=0):
@@ -74,8 +86,12 @@ def experiment_label_shift(
         features_short_id=None,
         result_dir='../results/random_split_features',
         dataset_dir='../datasets',
-        n_runs=5
+        n_runs=N_RUNS
 ):
+    """
+    Main function: fully defines one experiment, involving a (dataset, method, feature setup)
+    The experiment simulates label shift, and carries out n_runs repetitions.
+    """
 
     qp.environ['SAMPLE_SIZE'] = sample_size
     result_dir = get_full_path(result_dir, dataset_name, n_classes, sample_size)
@@ -121,7 +137,7 @@ def experiment_label_shift(
                     model_selection = GridSearchQ(
                         model=method,
                         param_grid=param_grid,
-                        protocol=UPP(validation, repeats=250),
+                        protocol=UPP(validation, repeats=N_VAL_SAMPLES),
                         n_jobs=-1,
                         refit=True,
                         verbose=False
@@ -129,7 +145,7 @@ def experiment_label_shift(
                     method = model_selection.best_model()
 
                 # model test
-                test_protocol = UPP(test, repeats=1000)
+                test_protocol = UPP(test, repeats=N_TEST_SAMPLES)
 
                 report = evaluation_report(method, protocol=test_protocol, error_metrics=[nmd, ae], verbose=False)
                 report['method'] = method_name
@@ -201,9 +217,10 @@ def prepare_dataset(dataset_name, n_classes, data_dir):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Launch feature test for effect prediction.")
-    parser.add_argument('--method', type=str, default='all', help='Name of the method to use')
+    parser.add_argument('--method', type=str, default='all', 
+                        help='Name of the method to use')
     parser.add_argument('--feats', type=str, default='all',
-                        help='Feature blocks to use: all=all blocks concatenated, full= all + 1st-level + 2nd level')
+                        help='Feature blocks to use: all=all blocks concatenated, groups=all+1st_level, full=all+1st_level+2nd_level')
     parser.add_argument('--dataset', type=str, default='all',
                         help='Choose the dataset; set to "all" (default) for all datasets')
 
@@ -211,10 +228,12 @@ if __name__ == '__main__':
 
     if args.feats == 'all':
         feature_blocks = ['all']
+    elif args.feats == 'groups':
+        feature_blocks = ['all'] + FEATURE_GROUP_PREFIXES
     elif args.feats == 'full':
         feature_blocks = ['all'] + FEATURE_GROUP_PREFIXES + data.FEATURE_SUBGROUP_PREFIXES
     else:
-        raise ValueError('unrecognized --feats, valid args are "all" and "full"')
+        raise ValueError('unrecognized --feats, valid args are "all", "groups", and "full"')
 
     feature_blocks = feature_blocks
 
@@ -228,4 +247,6 @@ if __name__ == '__main__':
         all_reports.extend(reports)
 
     show_results_random_split(pd.concat(all_reports))
+
+
 
