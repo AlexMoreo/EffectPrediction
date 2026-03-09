@@ -89,7 +89,7 @@ def greedy_feature_exploration(baseline_score, baseline_features, featblock_scor
             else:
                 selection_pos = n_blocks * round_idx + i
 
-            print(f'[round={round_idx}/{n_rounds} {"(refinement)" if refinement_round else ""}] '
+            print(f'[round={round_idx+1}/{n_rounds} {"(refinement)" if refinement_round else ""}] '
                   f'deciding for feature block: {feat_block}')
 
             new_candidates = list(contributing_features)
@@ -124,9 +124,9 @@ def greedy_feature_exploration(baseline_score, baseline_features, featblock_scor
                 selection_code[selection_pos] = 1 - selection_code[selection_pos]
                 print('revert change')
 
-            print(f'[{dataset_name}] {round_idx=}/{n_rounds} ({i}/{n_blocks}) as for now, we have {len(contributing_features)}/{len(featblock_scores_sorted)} features')
+            print(f'[{dataset_name}] round_idx={round_idx+1}/{n_rounds} ({i}/{n_blocks}) as for now, we have {len(contributing_features)}/{len(featblock_scores_sorted)} features')
             print(contributing_features)
-            print(f'[{dataset_name}] {round_idx=}/{n_rounds} ({i}/{n_blocks}) best {best_score}')
+            print(f'[{dataset_name}] round_idx={round_idx+1}/{n_rounds} ({i}/{n_blocks}) best {best_score}')
 
         round_idx+=1
 

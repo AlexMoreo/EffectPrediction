@@ -5,9 +5,9 @@ SAMPLE_SIZE = 500
 # N_TEST_SAMPLES = 1000
 # N_VAL_SAMPLES = 250
 # N_RUNS=5
-N_TEST_SAMPLES = 100
-N_VAL_SAMPLES = 100
-N_RUNS=1
+N_TEST_SAMPLES = 1000
+N_VAL_SAMPLES = 250
+N_RUNS=5
 
 
 # One reviewer asked about the sensitivity to different discretizations of the classes.

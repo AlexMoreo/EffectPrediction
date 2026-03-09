@@ -225,8 +225,8 @@ def load_dataset(path,
             label_classes[label] = pd.cut(scores, bins=threshold_values, labels=new_labels, right=False).to_numpy()
         elif GLOBAL_DISCRETIZATION_SETUP=='isodense':
             label_classes[label] = pd.qcut(scores, q=n_classes, labels=False, duplicates="drop")
-            print(f'Global setup=isodense: min={np.min(scores):.3f}, max={np.max(scores):.3f}, '
-                  f'ave={np.mean(scores):.3f}, mode={mode(scores):.3f}, n_classes={np.unique(label_classes[label])}')
+            # print(f'Global setup=isodense: min={np.min(scores):.3f}, max={np.max(scores):.3f}, '
+            #       f'ave={np.mean(scores):.3f}, mode={mode(scores):.3f}, n_classes={np.unique(label_classes[label])}')
         else:
             raise ValueError(f'Global variable {GLOBAL_DISCRETIZATION_SETUP=} not recognized')
 
@@ -255,7 +255,7 @@ def load_dataset(path,
     # filter by feature_blocks
     covariate_blocks = []
     if features_blocks != 'all':
-        print(f'selecting {features_blocks} from {list(prefix_idx.keys())}')
+        # print(f'selecting {features_blocks} from {list(prefix_idx.keys())}')
         if isinstance(features_blocks, str):
             features_blocks=[features_blocks]
         for feature_block in features_blocks:

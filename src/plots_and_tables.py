@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from commons import SAMPLE_SIZE
 from comparison_group import SelectByName, ColourGroup
 from data import FEATURE_GROUP_PREFIXES, FEATURE_SUBGROUP_PREFIXES
+from format import FormatModifierSelectColor
 # from format import FormatModifierSelectColor
 
 from new_table import LatexTable, save_text
@@ -24,6 +25,7 @@ pd.set_option("display.width", 1000)
 n_classes = 5
 result_dir = '../results'
 
+DATASETS = ['activity', 'toxicity'] #, 'diversity']
 
 def plot_trend_by_methods(report_list, path_name, plotsize, legend, title=''):
     df = pd.concat(report_list)
@@ -126,6 +128,7 @@ def load_exploration_report(method, result_dir, config_path, dataset):
                                                   n_classes=5, method=method, feature_block='all')
 
     result_path = join(result_dir, 'exploration', config_path, f'{method}_exploration.json')
+    os.makedirs(pathlib.Path(result_path).parent, exist_ok=True)
     with open(result_path, "r", encoding="utf-8") as f:
         exploration_data = json.load(f)
         exploration_data['reference_all_score'] = result_all_features
@@ -135,7 +138,7 @@ def load_exploration_report(method, result_dir, config_path, dataset):
 
 def generate_trends_plots(method_names, out_dir='../fig/random_split_features/'):
 
-    for idx, dataset in enumerate(['activity', 'toxicity', 'diversity']):
+    for idx, dataset in enumerate(DATASETS):
         config_path = f'samplesize{SAMPLE_SIZE}/{dataset}/{n_classes}_classes'
         results = []
         for m in method_names:
@@ -166,7 +169,7 @@ def generate_trends_plots(method_names, out_dir='../fig/random_split_features/')
 
 def generate_auc_tables(method, out_dir='../tables'):
     auc_df_by_dataset = []
-    for dataset in ['activity', 'toxicity', 'diversity']:
+    for dataset in DATASETS:
         config_path = f'samplesize{SAMPLE_SIZE}/{dataset}/{n_classes}_classes'
         result_path = join(result_dir, 'random_split_features', config_path, f'EMQ__*.csv')
 
@@ -207,8 +210,7 @@ def generate_auc_tables(method, out_dir='../tables'):
 def generate_featorder_table(method, out_dir='../tables/tables'):
 
     table = {}
-    datasets = ['activity', 'toxicity', 'diversity']
-    for dataset in datasets:
+    for dataset in DATASETS:
 
         feature_names = []
         feature_aucs = []
@@ -239,7 +241,7 @@ def generate_featorder_table(method, out_dir='../tables/tables'):
         table[f'{dataset}']={'names': feature_names, 'aucs': feature_aucs}
     print(table)
 
-    num_features = len(table[datasets[0]]['names'])
+    num_features = len(table[DATASETS[0]]['names'])
 
     lines = []
 
@@ -263,18 +265,18 @@ def generate_featorder_table(method, out_dir='../tables/tables'):
         return feature_name.split(':')[0].strip()
 
     # Begin tabular environment with one column for rank and two for each dataset
-    lines.append(r'\begin{tabular}{c' + '|rc' * len(datasets) + '}')
+    lines.append(r'\begin{tabular}{c' + '|rc' * len(DATASETS) + '}')
     lines.append(r'\toprule')
 
     # First header row: dataset names as multicolumns
     header = [r'\multicolumn{1}{c}{}']  # empty cell for rank column
-    for dataset in datasets:
+    for dataset in DATASETS:
         header.append(r'\multicolumn{2}{c}{\textsc{' + dataset.capitalize() + '}}')
     lines.append(' & '.join(header) + r' \\')
 
     # Second header row: column names under each dataset
     subheader = [r'\multicolumn{1}{c}{\textbf{Rank}}']
-    for _ in datasets:
+    for _ in DATASETS:
         subheader.extend([r'\multicolumn{1}{c}{\textsc{Feature name}}', r'\multicolumn{1}{c}{\textsc{AUC}}'])
     lines.append(' & '.join(subheader) + r' \\')
 
@@ -283,7 +285,7 @@ def generate_featorder_table(method, out_dir='../tables/tables'):
     # Add the table rows with rank
     for i in range(num_features):
         row = [str(i + 1)]  # rank starts at 1
-        for dataset in datasets:
+        for dataset in DATASETS:
             name = table[dataset]['names'][i]
             auc = table[dataset]['aucs'][i]
             parent = get_parent(name)
@@ -310,8 +312,7 @@ def generate_selection_table(method, out_dir='../tables'):
 
     exploration_reports = {}
     selected_features = {}
-    datasets = ['activity', 'toxicity', 'diversity']
-    for dataset in datasets:
+    for dataset in DATASETS:
         config_path = f'samplesize{SAMPLE_SIZE}/{dataset}/{n_classes}_classes'
 
         exploration_report = load_exploration_report(method, result_dir, config_path, dataset)
@@ -319,7 +320,7 @@ def generate_selection_table(method, out_dir='../tables'):
         exploration_reports[dataset] = exploration_report
 
     n_features = len(FEATURE_SUBGROUP_PREFIXES)
-    n_datasets = 3
+    n_datasets = len(DATASETS)
     table = LatexTable(name='selection')
     table.format.configuration.show_std=False
     table.format.configuration.mean_prec = 0
@@ -332,7 +333,7 @@ def generate_selection_table(method, out_dir='../tables'):
         )
     )
     for feature in FEATURE_SUBGROUP_PREFIXES:
-        for dataset in datasets:
+        for dataset in DATASETS:
             selected = 1 if feature in selected_features[dataset] else 0
             table.add(benchmark=feature, method=dataset, v=selected)
 
@@ -401,15 +402,15 @@ def generate_selection_table(method, out_dir='../tables'):
 
     # add reference value (all features), optimized value, and relative error reduction
 
-    ref_values = [f'{exploration_reports[d]["reference_all_score"]:.3f}' for d in datasets]
+    ref_values = [f'{exploration_reports[d]["reference_all_score"]:.3f}' for d in DATASETS]
     ref_values_str = ' & '.join(ref_values)
     lines.append(r'\multicolumn{2}{c}{All features} & '+ref_values_str+r' \\')
 
-    ref_values = [f'{exploration_reports[d]["final_score"]:.3f}' for d in datasets]
+    ref_values = [f'{exploration_reports[d]["final_score"]:.3f}' for d in DATASETS]
     ref_values_str = ' & '.join(ref_values)
     lines.append(r'\multicolumn{2}{c}{Optimized features} & '+ref_values_str+r' \\')
 
-    ref_values = [f'{exploration_reports[d]["rel_all_err_reduction"]:.2f}\\%' for d in datasets]
+    ref_values = [f'{exploration_reports[d]["rel_all_err_reduction"]:.2f}\\%' for d in DATASETS]
     ref_values_str = ' & '.join(ref_values)
     lines.append(r'\multicolumn{2}{c}{Rel. Error Reduction (\%)} & ' + ref_values_str + r' \\')
 
@@ -441,5 +442,5 @@ if __name__ == '__main__':
 
     generate_trends_plots(method_names)
     # generate_auc_tables(method=method)
-    # generate_selection_table(method=method)
+    generate_selection_table(method=method)
 

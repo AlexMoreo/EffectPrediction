@@ -19,7 +19,8 @@ import data
 from data import load_dataset, FEATURE_GROUP_PREFIXES
 from quapy.error import ae, nmd
 from quapy.evaluation import evaluation_report
-
+from joblib import Parallel, delayed
+from tqdm.auto import tqdm
 
 """
 This script evaluates feature blocks and stores results in disc, so they are available as pre-computed
@@ -77,6 +78,68 @@ def experiment_pps_random_split_all_methods(
     return all_reports
 
 
+def _run_one_seed(
+    run, dataset_dir, dataset_name, n_classes, features, n_batches, method_name, feature_names, sample_size
+):
+    print(f"Running {dataset_name} {method_name} run={run}")
+
+    qp.environ['SAMPLE_SIZE'] = sample_size
+
+    training_pool, test, batch_size, random_order, classes, blocks_ids = load_data(
+        dataset_dir, dataset_name, n_classes, features, n_batches, seed=run,
+    )
+
+    trainsize_reports = []
+
+    pbar = tqdm(total=n_batches, desc=f"run {run}", position=run, leave=True )
+    for batch in range(n_batches):
+        tr_selection = random_order[: (batch + 1) * batch_size]
+        train = training_pool.sampling_from_index(tr_selection)
+
+        method, param_grid = new_method(method_name, blocks_ids)
+
+        # model training
+        if len(param_grid) == 0:
+            method.fit(train)
+        else:
+            devel, validation = train.split_stratified(random_state=0)
+            model_selection = GridSearchQ(
+                model=method,
+                param_grid=param_grid,
+                protocol=UPP(validation, repeats=N_VAL_SAMPLES),
+                n_jobs=1,
+                refit=True,
+                verbose=False,
+            ).fit(devel)
+            method = model_selection.best_model()
+
+        # model test
+        test_protocol = UPP(test, repeats=N_TEST_SAMPLES)
+
+        report = evaluation_report(
+            method,
+            protocol=test_protocol,
+            error_metrics=[nmd, ae],
+            verbose=False,
+        )
+        report["method"] = method_name
+        report["tr_size"] = len(train)
+        report["features"] = feature_names
+        report["dataset"] = dataset_name
+        report["n_classes"] = n_classes
+        report["run"] = run
+        trainsize_reports.append(report)
+
+        pbar.set_postfix(
+            train_size=len(train),
+            nmd=f"{report.mean(numeric_only=True)['nmd']:.3f}"
+        )
+        pbar.update(1)
+    pbar.close()
+
+    return trainsize_reports
+
+
 def experiment_label_shift(
         dataset_name,
         n_classes,
@@ -92,8 +155,6 @@ def experiment_label_shift(
     Main function: fully defines one experiment, involving a (dataset, method, feature setup)
     The experiment simulates label shift, and carries out n_runs repetitions.
     """
-
-    qp.environ['SAMPLE_SIZE'] = sample_size
     result_dir = get_full_path(result_dir, dataset_name, n_classes, sample_size)
 
     if isinstance(features, str):
@@ -117,45 +178,14 @@ def experiment_label_shift(
     if os.path.exists(report_path):
         method_report = qp.util.load_report(report_path)
     else:
-        trainsize_reports = []
-        for run in range(n_runs):
-            print(f'Running {dataset_name} {method_name} {run=}')
-            training_pool, test, batch_size, random_order, classes, blocks_ids \
-                = load_data(dataset_dir, dataset_name, n_classes, features, n_batches, seed=run)
+        all_reports_nested = Parallel(n_jobs=n_runs)(
+            delayed(_run_one_seed)(
+                run, dataset_dir, dataset_name, n_classes, features, n_batches, method_name, feature_names, sample_size
+            )
+            for run in range(n_runs)
+        )
 
-            method, param_grid = new_method(method_name, blocks_ids)
-
-            for batch in range(n_batches):
-                tr_selection = random_order[:(batch+1)*batch_size]
-                train = training_pool.sampling_from_index(tr_selection)
-
-                # model training
-                if len(param_grid)==0:
-                    method.fit(train)
-                else:
-                    devel, validation = train.split_stratified(random_state=0)
-                    model_selection = GridSearchQ(
-                        model=method,
-                        param_grid=param_grid,
-                        protocol=UPP(validation, repeats=N_VAL_SAMPLES),
-                        n_jobs=-1,
-                        refit=True,
-                        verbose=False
-                    ).fit(devel)
-                    method = model_selection.best_model()
-
-                # model test
-                test_protocol = UPP(test, repeats=N_TEST_SAMPLES)
-
-                report = evaluation_report(method, protocol=test_protocol, error_metrics=[nmd, ae], verbose=False)
-                report['method'] = method_name
-                report['tr_size'] = len(train)
-                report['features'] = feature_names
-                report['dataset'] = dataset_name
-                report['n_classes'] = n_classes
-                report['run'] = run
-                trainsize_reports.append(report)
-                print(f'\ttrain-size={len(train)} got nmd={report.mean(numeric_only=True)["nmd"]:.3f}')
+        trainsize_reports = [r for run_reports in all_reports_nested for r in run_reports]
 
         method_report = pd.concat(trainsize_reports)
         method_report.to_csv(report_path)
