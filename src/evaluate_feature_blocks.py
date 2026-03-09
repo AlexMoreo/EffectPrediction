@@ -21,6 +21,7 @@ from quapy.error import ae, nmd
 from quapy.evaluation import evaluation_report
 from joblib import Parallel, delayed
 from tqdm.auto import tqdm
+from threadpoolctl import threadpool_limits
 
 """
 This script evaluates feature blocks and stores results in disc, so they are available as pre-computed
@@ -107,7 +108,7 @@ def _run_one_seed(
                 model=method,
                 param_grid=param_grid,
                 protocol=UPP(validation, repeats=N_VAL_SAMPLES),
-                n_jobs=10,
+                n_jobs=3,
                 refit=True,
                 verbose=False,
             ).fit(devel)
@@ -178,12 +179,13 @@ def experiment_label_shift(
     if os.path.exists(report_path):
         method_report = qp.util.load_report(report_path)
     else:
-        all_reports_nested = Parallel(n_jobs=n_runs)(
-            delayed(_run_one_seed)(
-                run, dataset_dir, dataset_name, n_classes, features, n_batches, method_name, feature_names, sample_size
+        with threadpool_limits(limits=1):
+            all_reports_nested = Parallel(n_jobs=n_runs)(
+                delayed(_run_one_seed)(
+                    run, dataset_dir, dataset_name, n_classes, features, n_batches, method_name, feature_names, sample_size
+                )
+                for run in range(n_runs)
             )
-            for run in range(n_runs)
-        )
 
         trainsize_reports = [r for run_reports in all_reports_nested for r in run_reports]
 
