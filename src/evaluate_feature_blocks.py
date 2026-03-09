@@ -107,7 +107,7 @@ def _run_one_seed(
                 model=method,
                 param_grid=param_grid,
                 protocol=UPP(validation, repeats=N_VAL_SAMPLES),
-                n_jobs=1,
+                n_jobs=10,
                 refit=True,
                 verbose=False,
             ).fit(devel)
