@@ -8,6 +8,9 @@ SAMPLE_SIZE = 500
 N_TEST_SAMPLES = 1000
 N_VAL_SAMPLES = 250
 N_RUNS=5
+N_CLASSES = 5
+RESULT_DIR = '../results'
+N_BATCHES = 16
 
 
 # One reviewer asked about the sensitivity to different discretizations of the classes.
@@ -18,7 +21,10 @@ N_RUNS=5
 GLOBAL_DISCRETIZATION_SETUP = "isodense"
 
 
-def get_full_path(base_dir, dataset_name, n_classes, sample_size=SAMPLE_SIZE):
-    path = join(base_dir, f'samplesize{sample_size}', dataset_name, f'{n_classes}_classes')
+def get_full_path(base_dir, dataset_name):
+    path = join(base_dir, f'samplesize{SAMPLE_SIZE}', dataset_name, f'{N_CLASSES}_classes')
     os.makedirs(path, exist_ok=True)
     return path
+
+
+

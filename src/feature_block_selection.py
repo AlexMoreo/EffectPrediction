@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 
-from commons import get_full_path, SAMPLE_SIZE
+from commons import get_full_path, SAMPLE_SIZE, N_CLASSES
 # from classification import BlockEnsembleClassifier
 from data import load_dataset, FEATURE_SUBGROUP_PREFIXES, FEATURE_HIERARCHY, FEATURE_GROUP_PREFIXES
 from evaluate_feature_blocks import experiment_label_shift
@@ -44,21 +44,21 @@ def inspect_best_departing_configuration(result_dir, dataset_name, n_classes, me
     results = []
     reference_block_names = ['all']+FEATURE_GROUP_PREFIXES
     for level in reference_block_names:
-        auc = load_precomputed_result(result_dir, dataset_name, n_classes, method, feature_block=level)
+        auc = load_precomputed_result(result_dir, dataset_name, method, feature_block=level)
         results.append(auc)
     results = np.asarray(results)
     best_block = reference_block_names[np.argmin(results)]
     return best_block
 
 
-def load_precomputed_result(result_dir, dataset_name, n_classes, method, feature_block='all'):
+def load_precomputed_result(result_dir, dataset_name, method, feature_block='all'):
     # returns the AUC for the best feature-block setup (or "ALL" if not indicated). 
     # This is the reference value we want to beat
-    result_dir = get_full_path(result_dir, dataset_name, n_classes)
+    result_dir = get_full_path(result_dir, dataset_name)
     result_file = join(result_dir, f'{method}__{feature_block}.csv')
     assert os.path.exists(result_file), f'result file {result_file} does not exist'
     df = pd.read_csv(result_file, index_col=0)
-    auc = AUC_from_result_df(df, logscale=False)
+    auc = AUC_from_result_df(df)
     return auc
 
 
@@ -183,17 +183,17 @@ if __name__ == '__main__':
     exploratory_results_dir = '../results/exploration'
     dataset_dir = '../datasets'
 
-    n_classes_list = [5]
+    n_classes = N_CLASSES
     dataset_names = ['activity', 'toxicity', 'diversity'] if args.dataset=='all' else [args.dataset]
     feature_blocks = FEATURE_SUBGROUP_PREFIXES
     method = 'EMQ'
 
 
-    for dataset_name, n_classes in product(dataset_names, n_classes_list):
+    for dataset_name in dataset_names:
         best_block = inspect_best_departing_configuration(precomputed_results_dir, dataset_name, n_classes, method)
         baseline_features = FEATURE_HIERARCHY[best_block]
 
-        baseline_score = load_precomputed_result(precomputed_results_dir, dataset_name, n_classes, method, feature_block=best_block)
+        baseline_score = load_precomputed_result(precomputed_results_dir, dataset_name, method, feature_block=best_block)
         featblock_scores_sorted = load_precomputed_reports(precomputed_results_dir, feature_blocks, dataset_name, n_classes, method)
 
         print(f'Best score: {baseline_score:.3f} for block={best_block}')
@@ -203,7 +203,7 @@ if __name__ == '__main__':
             baseline_score, baseline_features, featblock_scores_sorted
         )
 
-        report_path = get_full_path(exploratory_results_dir, dataset_name, n_classes)
+        report_path = get_full_path(exploratory_results_dir, dataset_name)
         report_path = join(report_path, f'{method}_exploration.json')
         write_exploration_report(report_path, contributing_features, final_score, baseline_score, best_path)
 

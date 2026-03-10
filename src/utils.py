@@ -5,6 +5,8 @@ import numpy as np
 import quapy as qp
 import warnings
 
+from commons import N_RUNS
+
 warnings.filterwarnings("ignore", category=UserWarning, module='sklearn')
 warnings.filterwarnings("ignore", category=ConvergenceWarning, module='sklearn')
 
@@ -141,11 +143,13 @@ def mmd_pairwise_rbf_blocks_pval(Xs, blocks_idx, gammas=1.):
     return mmd_matrix, mmd_pvals
 
 
-def AUC_from_result_df(result_df, logscale=False):
-    grouped = result_df.groupby('tr_size', sort=True)['nmd'].mean().reset_index()
-    tr_size = grouped['tr_size'].tolist()
-    nmd_means = grouped['nmd'].tolist()
-    auc = np.trapz(y=nmd_means, x=tr_size)
-    if logscale:
-        auc = np.log(auc)
-    return auc
+def AUC_from_result_df(result_df):
+    aucs = []
+    for run in range(N_RUNS):
+        result_run = result_df[result_df['run']==run]
+        grouped = result_run.groupby('tr_size', sort=True)['nmd'].mean().reset_index()
+        tr_size = grouped['tr_size'].tolist()
+        nmd_means = grouped['nmd'].tolist()
+        auc = np.trapz(y=nmd_means, x=tr_size)
+        aucs.append(auc)
+    return aucs

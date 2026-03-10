@@ -4,10 +4,10 @@ from os.path import join
 from itertools import product
 from pathlib import Path
 
-from commons import SAMPLE_SIZE
+from commons import SAMPLE_SIZE, N_CLASSES
 from data import FEATURE_SUBGROUP_PREFIXES
 from feature_block_selection import evaluate_candidates
-from plots_and_tables import load_exploration_report
+from plots_and_tables import _load_exploration_report
 
 
 
@@ -54,15 +54,13 @@ if __name__ == '__main__':
     dataset_dir = '../datasets'
     importance_dir = join(results_dir, 'feat_importance')
 
-
-    n_classes_list = [5]
-    dataset_names = ['diversity', 'toxicity', 'activity' ] if args.dataset=='all' else [args.dataset]
+    dataset_names = ['activity', 'toxicity', 'diversity'] if args.dataset=='all' else [args.dataset]
     feature_blocks = FEATURE_SUBGROUP_PREFIXES
     method = 'EMQ'
 
-    for dataset_name, n_classes in product(dataset_names, n_classes_list):
-        config_path = f'samplesize{SAMPLE_SIZE}/{dataset_name}/{n_classes}_classes'
-        exploration_report = load_exploration_report(method, results_dir, config_path, dataset_name)
+    for dataset_name in dataset_names:
+        config_path = f'samplesize{SAMPLE_SIZE}/{dataset_name}/{N_CLASSES}_classes'
+        exploration_report = _load_exploration_report(method, results_dir, config_path, dataset_name)
         print(exploration_report)
 
         best_auc_found = exploration_report['final_score']

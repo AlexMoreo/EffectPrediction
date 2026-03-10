@@ -2,18 +2,19 @@ import os
 import pathlib
 from os.path import join
 from glob import glob
-
+import json
 import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
-
-from commons import SAMPLE_SIZE
+from tqdm import tqdm
+from commons import SAMPLE_SIZE, N_CLASSES, RESULT_DIR, N_BATCHES, N_RUNS
 from comparison_group import SelectByName, ColourGroup
-from data import FEATURE_GROUP_PREFIXES, FEATURE_SUBGROUP_PREFIXES
+from data import FEATURE_SUBGROUP_PREFIXES, load_dataset
+from evaluate_feature_blocks import load_data, replicable_partition
 from format import FormatModifierSelectColor
 # from format import FormatModifierSelectColor
-
+import quapy as qp
 from new_table import LatexTable, save_text
 from tools import tex_table, tex_document, latex2pdf
 from utils import AUC_from_result_df
@@ -22,21 +23,22 @@ from feature_block_selection import load_precomputed_result
 pd.set_option("display.max_columns", None)
 pd.set_option("display.width", 1000)
 
-n_classes = 5
-result_dir = '../results'
+DATASETS = ['activity', 'toxicity', 'diversity']
 
-DATASETS = ['activity', 'toxicity'] #, 'diversity']
+FIGURES_DIR = '../results/figures'
+TABLES_DIR  = '../results/tables'
+
 
 def plot_trend_by_methods(report_list, path_name, plotsize, legend, title=''):
+    """
+    Main plots showing NMD error trends (y-axis) as a function of the training size (x-axis) for
+    different methods across the three datasets.
+    """
     df = pd.concat(report_list)
 
-    print(df)
-
-    df["method_features"] = df["method"] #+ " (" + df["features"] + ")"
+    df["method_features"] = df["method"]
     df["method_features"] = df["method_features"].str.replace(r"MLPE .*", "MLPE", regex=True)
     df["method_features"] = df["method_features"].str.replace(r"EMQ optimized.*", "EMQO", regex=True)
-
-    print(df)
 
     sns.set(style="whitegrid")
 
@@ -48,7 +50,6 @@ def plot_trend_by_methods(report_list, path_name, plotsize, legend, title=''):
     plt.title(title)
 
     if legend:
-        # plt.legend(loc='upper left', bbox_to_anchor=(1,1))
         plt.legend(loc='upper right')
     else:
         plt.legend().remove()
@@ -59,30 +60,47 @@ def plot_trend_by_methods(report_list, path_name, plotsize, legend, title=''):
     plt.savefig(path_name)
 
 
-def plot_trend_by_feats(report_list, path_name, dataset, plotsize, legend, title='', sel_method=None):
+def plot_err_by_shift(report_list, training_prevalences, path_name, plotsize, legend, title=''):
+    """
+    Plots showing NMD error trends (y-axis) as a function of the amount of shift (x-axis) as measured
+    by the absolute error between the training prevalence and the test prevalence of each experiment.
+    Results are binned in quantiles of experiments.
+    """
+    os.makedirs(pathlib.Path(path_name).parent, exist_ok=True)
+
     df = pd.concat(report_list)
 
-    if sel_method is not None:
-        df = df[df.method==sel_method]
+    df["method_features"] = df["method"]
+    df["method_features"] = df["method_features"].str.replace(r"MLPE .*", "MLPE", regex=True)
+    df["method_features"] = df["method_features"].str.replace(r"EMQ optimized.*", "EMQO", regex=True)
 
-    print(df)
+    def compute_shift(row):
+        train_prev = training_prevalences[row.dataset][row.run][row.tr_size]
+        return qp.error.mae(row["true-prev"], train_prev)
 
-    # df["method_features"] = df["method"] #+ " (" + df["features"] + ")"
-    # df["method_features"] = df["method_features"].str.replace(r"MLPE .*", "MLPE", regex=True)
+    # convert string prevalences to np.ndarray
+    df["true-prev"] = df["true-prev"].apply(
+        lambda x: np.fromstring(x.strip("[]"), sep=" ")
+    )
+    df["shift"] = df.apply(compute_shift, axis=1)
 
     print(df)
 
     sns.set(style="whitegrid")
 
     plt.figure(figsize=plotsize)
-    sns.lineplot(data=df, x="tr_size", y="nmd", hue="features", marker="o", palette="tab10")
 
-    plt.xlabel("Training Size")
-    plt.ylabel("NMD Error")
+    # df["shift_bin"] = pd.cut(df["shift"], bins=20)
+    df["shift_bin"] = pd.qcut(df["shift"], q=10, duplicates='drop')
+    df["shift_mid"] = df["shift_bin"].apply(lambda x: x.mid)
+    sns.lineplot(data=df, x="shift_mid", y="nmd", hue="method_features", marker="o", palette="tab10")
+
+    plt.xlabel("Shift (AE)")
+    plt.ylabel("NMD error")
     plt.title(title)
 
     if legend:
-        plt.legend(title="Features", loc='upper left', bbox_to_anchor=(1,1))
+        plt.legend(loc='upper right')
     else:
         plt.legend().remove()
     plt.ylim(0.05,0.3)
@@ -92,7 +110,8 @@ def plot_trend_by_feats(report_list, path_name, dataset, plotsize, legend, title
     plt.savefig(path_name)
 
 
-def compute_AUC(report_list, dataset, add_duplicate=True):
+def _compute_AUC(report_list, dataset, add_duplicate=True):
+    # Auxiliary function: returns area under the curve for a given method
     df = pd.concat(report_list)
     assert len(df.method.unique())==1, 'unexpected number of methods'
     datasets = df.dataset.unique()
@@ -102,7 +121,7 @@ def compute_AUC(report_list, dataset, add_duplicate=True):
     auc_dict = []
     for features in df.features.unique():
         df_sel = df[df['features']==features]
-        auc = AUC_from_result_df(df_sel)
+        aucs = AUC_from_result_df(df_sel)
 
         if features == 'all':
             father, soon = 'root', 'all'
@@ -111,67 +130,111 @@ def compute_AUC(report_list, dataset, add_duplicate=True):
         else:
             father, soon = 'root', features
 
-        auc_dict.append({'features': features, 'father': father, 'soon': soon, 'auc': auc, 'dataset': dataset})
+        for run, auc_run in enumerate(aucs):
+            auc_dict.append({'features': features, 'father': father, 'soon': soon, 'auc': auc_run, 'dataset': dataset, 'run': run})
 
-        # adds a duplicate that serves as a reference method for the children
-        if add_duplicate and father=='root' and soon != 'all':
-            auc_dict.append({'features': features, 'father': soon, 'soon': soon + " (full)", 'auc': auc, 'dataset': dataset})
+            # adds a duplicate that serves as a reference method for the children
+            if add_duplicate and father=='root' and soon != 'all':
+                auc_dict.append({'features': features, 'father': soon, 'soon': soon + " (full)", 'auc': auc_run, 'dataset': dataset, 'run': run})
 
     auc_df = pd.DataFrame(auc_dict)
     return auc_df
 
 
-def load_exploration_report(method, result_dir, config_path, dataset):
-    import json
-
-    result_all_features = load_precomputed_result('../results/random_split_features', dataset,
-                                                  n_classes=5, method=method, feature_block='all')
+def _load_exploration_report(method, result_dir, config_path, dataset):
+    # auxiliary function: loads an "exploratory report" (the report generated by the Greedy search) and
+    # enriches it with additional information (std, relative improvement wrt the "all features" reference, etc.)
+    result_all_features = load_precomputed_result(
+        '../results/random_split_features', dataset, method=method, feature_block='all'
+    )
+    result_all_features_mean = np.mean(result_all_features)
+    result_all_features_std = np.std(result_all_features)
 
     result_path = join(result_dir, 'exploration', config_path, f'{method}_exploration.json')
     os.makedirs(pathlib.Path(result_path).parent, exist_ok=True)
     with open(result_path, "r", encoding="utf-8") as f:
         exploration_data = json.load(f)
-        exploration_data['reference_all_score'] = result_all_features
-        exploration_data['rel_all_err_reduction'] = 100 * (result_all_features - exploration_data['final_score']) / result_all_features
+        exploration_data['reference_all_score'] = result_all_features_mean
+        exploration_data['reference_all_score_std'] = result_all_features_std
+        exploration_data['rel_all_err_reduction'] = 100 * (result_all_features_mean - exploration_data['final_score']) / result_all_features_mean
+
+        # compute std across runs of the optimized version
+        best_path = exploration_data['best_conf_path']
+        df = pd.read_csv(best_path, index_col=0)
+        aucs = AUC_from_result_df(df)
+        exploration_data['final_score_std'] = np.std(aucs)
+
         return exploration_data
 
 
-def generate_trends_plots(method_names, out_dir='../fig/random_split_features/'):
+def _load_dataset_results(dataset, method_names):
+    config_path = f'samplesize{SAMPLE_SIZE}/{dataset}/{N_CLASSES}_classes'
+    results = []
+    for m in method_names:
+        result_path = join(RESULT_DIR, 'random_split_features', config_path, f'{m}__all.csv')
+        df = pd.read_csv(result_path, index_col=0)
+        results.append(df)
+
+        # for the selected method, it also loads the exploration report and shows the optimized features trend
+        if m == method:
+            optim_path = _load_exploration_report(method, RESULT_DIR, config_path, dataset)['best_conf_path']
+            df = pd.read_csv(optim_path, index_col=0)
+            df['method'] = df['method'].replace('EMQ', 'EMQ optimized')
+            results.append(df)
+    return results
+
+
+def _reconstruct_experimental_training_prevalences(dataset_dir):
+    # this script reconstructs all training prevalences (that we had not initially saved in our runs);
+    # since everything is seeded, the splits are perfectly replicable
+    training_prevs = {}
+    for dataset in tqdm(DATASETS, desc='datasets'):
+        data = load_dataset(f'{dataset_dir}/{dataset}_dataset', n_classes=N_CLASSES)
+        training_prevs[dataset] = {}
+        for seed in range(N_RUNS):
+            training_prevs[dataset][seed] = {}
+            training_pool, _, batch_size, random_order, _ = replicable_partition(data.X, data.y, np.arange(N_CLASSES), N_BATCHES, seed=seed)
+            for batch in range(N_BATCHES):
+                tr_selection = random_order[: (batch + 1) * batch_size]  # incremental selections
+                train = training_pool.sampling_from_index(tr_selection)
+                train_size = len(train)
+                train_prev = train.prevalence()
+                training_prevs[dataset][seed][train_size] = train_prev
+
+    return training_prevs
+
+
+def generate_trends_plots(method_names, out_dir=f'{FIGURES_DIR}/random_split_features/'):
+    # invokes the plot_trend_by_methods for every dataset
+    for idx, dataset in enumerate(DATASETS):
+        results = _load_dataset_results(dataset, method_names)
+
+        # generates a plot comparing the trends of all methods
+        path_name = join(out_dir, f'samplesize{SAMPLE_SIZE}_{N_CLASSES}_classes', f'{dataset}.pdf')
+        plot_trend_by_methods(results, path_name, plotsize=(5,5), legend=(idx==1), title=f'{dataset}')
+
+
+def generate_err_by_shift_plots(method_names, out_dir=f'{FIGURES_DIR}/err_by_shift'):
+    # invokes the plot_err_by_shift for every dataset
+
+    # prepare folder
+    training_prevs = _reconstruct_experimental_training_prevalences('../datasets')
 
     for idx, dataset in enumerate(DATASETS):
-        config_path = f'samplesize{SAMPLE_SIZE}/{dataset}/{n_classes}_classes'
-        results = []
-        for m in method_names:
-            result_path = join(result_dir, 'random_split_features', config_path, f'{m}__all.csv')
-            df = pd.read_csv(result_path, index_col=0)
-            results.append(df)
+        results = _load_dataset_results(dataset, method_names)
 
-            # for the selected method, it also loads the exploration report and shows the optimized features trend
-            if m == method:
-                optim_path = load_exploration_report(method, result_dir, config_path, dataset)['best_conf_path']
-                df = pd.read_csv(optim_path, index_col=0)
-                df['method'] = df['method'].replace('EMQ', 'EMQ optimized')
-                results.append(df)
+        # generates a plot comparing the trends of all methods
+        path_name = join(out_dir, f'samplesize{SAMPLE_SIZE}_{N_CLASSES}_classes', f'{dataset}.pdf')
+        plot_err_by_shift(results, training_prevs, path_name, plotsize=(5,5), legend=(idx==1), title=f'{dataset}')
 
 
-            # generates a plot comparing the trends of all methods
-            path_name = join(out_dir, f'samplesize{SAMPLE_SIZE}_{n_classes}_classes', f'{dataset}.pdf')
-
-            if idx == 1: # the central figure
-                plotsize = (5, 5)
-                legend = True
-            else: #first and third figure
-                plotsize = (5, 5)
-                legend = False
-
-            plot_trend_by_methods(results, path_name, plotsize, legend, title=f'{dataset}')
-
-
-def generate_auc_tables(method, out_dir='../tables'):
+def generate_auc_tables(method, out_dir=TABLES_DIR):
+    # generates tables of AUC for all datasets and for all feature groups, including "ALL", the first level, and the
+    # subgroups
     auc_df_by_dataset = []
     for dataset in DATASETS:
-        config_path = f'samplesize{SAMPLE_SIZE}/{dataset}/{n_classes}_classes'
-        result_path = join(result_dir, 'random_split_features', config_path, f'EMQ__*.csv')
+        config_path = f'samplesize{SAMPLE_SIZE}/{dataset}/{N_CLASSES}_classes'
+        result_path = join(RESULT_DIR, 'random_split_features', config_path, f'EMQ__*.csv')
 
         reports = []
         for csv_path in glob(result_path):
@@ -181,42 +244,47 @@ def generate_auc_tables(method, out_dir='../tables'):
                 df = pd.read_csv(csv_path, index_col=0)
                 reports.append(df)
 
-        auc_df = compute_AUC(reports, dataset)
+        auc_df = _compute_AUC(reports, dataset)
         auc_df_by_dataset.append(auc_df)
 
     final_df = pd.concat(auc_df_by_dataset)
 
     tables = []
     for father in final_df.father.unique():
+        # if father!='root': continue
         auc_sel_df = final_df[final_df.father==father]
 
         table = LatexTable.from_dataframe(auc_sel_df, method='soon', benchmark='dataset', value='auc', name=father)
-        table.format.configuration.show_std = False
+        table.format.configuration.show_std = True
         table.format.configuration.stat_test = None
         table.format.configuration.side_columns = True
         table.format.configuration.mean_prec=1
+        table.format.configuration.std_prec=2
+        table.format.configuration.transpose = True
         columns = list(table.methods)
-        first = [f for f in columns if '(full)' in f or f=='all']  # the father is the only one without "(full)"
-        rest  = sorted([f for f in columns if f not in first])
-        table.reorder_methods(first+rest)
-        # for i in range(table.n_methods):
-        #     table.methods
+        last = [f for f in columns if '(full)' in f or f=='all']  # the father is the only one without "(full)"
+        rest  = sorted([f for f in columns if f not in last])
+        table.reorder_methods(rest+last)
+        table.reorder_benchmarks(['activity', 'toxicity', 'diversity'])
         tables.append(table)
 
-    pdf_path_name = join(out_dir, f'auc_features_{method}_{n_classes}_classes.pdf')
+    pdf_path_name = join(out_dir, f'auc_features_{method}_{N_CLASSES}_classes.pdf')
     LatexTable.LatexPDF(pdf_path=pdf_path_name, tables=tables, dedicated_pages=False)
 
 
-def generate_featorder_table(method, out_dir='../tables/tables'):
+def generate_featorder_table(method, out_dir=f'{TABLES_DIR}/tables'):
+    # generates a table displaying the order in which the features are explored (which depends on the individual
+    # AUC for NMD); the elements in the table are color-coded by super group.
 
     table = {}
     for dataset in DATASETS:
 
         feature_names = []
         feature_aucs = []
+        feature_aucs_std = []
 
-        config_path = f'samplesize{SAMPLE_SIZE}/{dataset}/{n_classes}_classes'
-        result_path = join(result_dir, 'random_split_features', config_path, f'EMQ__*.csv')
+        config_path = f'samplesize{SAMPLE_SIZE}/{dataset}/{N_CLASSES}_classes'
+        result_path = join(RESULT_DIR, 'random_split_features', config_path, f'EMQ__*.csv')
 
         for csv_path in glob(result_path):
             if '--' not in pathlib.Path(csv_path).name:
@@ -227,18 +295,23 @@ def generate_featorder_table(method, out_dir='../tables/tables'):
             if method_name==method:
                 df = pd.read_csv(csv_path, index_col=0)
                 auc = AUC_from_result_df(df)
+                auc_ave = np.mean(auc)
+                auc_std = np.std(auc)
                 feature_name = feature_name.replace('_', r'\_').replace('--', ': ')
                 feature_names.append(feature_name)
-                feature_aucs.append(auc)
+                feature_aucs.append(auc_ave)
+                feature_aucs_std.append(auc_std)
 
         feature_names = np.asarray(feature_names)
         feature_aucs = np.asarray(feature_aucs)
+        feature_aucs_std = np.asarray(feature_aucs_std)
 
         order = np.argsort(-feature_aucs)
         feature_names = feature_names[order]
         feature_aucs  = feature_aucs[order]
+        feature_aucs_std = feature_aucs_std[order]
 
-        table[f'{dataset}']={'names': feature_names, 'aucs': feature_aucs}
+        table[f'{dataset}']={'names': feature_names, 'aucs': feature_aucs, 'aucs_std': feature_aucs_std}
     print(table)
 
     num_features = len(table[DATASETS[0]]['names'])
@@ -288,10 +361,11 @@ def generate_featorder_table(method, out_dir='../tables/tables'):
         for dataset in DATASETS:
             name = table[dataset]['names'][i]
             auc = table[dataset]['aucs'][i]
+            std = table[dataset]['aucs_std'][i]
             parent = get_parent(name)
             color = parent_colors.get(parent, default_color)
             colored_name = r'\cellcolor{' + color + '}' + name
-            colored_auc = r'\cellcolor{' + color + '}' + f'{auc:.3f}'
+            colored_auc = r'\cellcolor{' + color + '}' + f'{auc:.3f}$\pm${std:.3f}'
             row.extend([colored_name, colored_auc])
         lines.append(' & '.join(row) + r' \\')
 
@@ -303,19 +377,19 @@ def generate_featorder_table(method, out_dir='../tables/tables'):
     # show
     print(tabular)
 
-    tabular_path_name = join(out_dir, f'auc_featuorder_{method}_{n_classes}_classes.tex')
+    tabular_path_name = join(out_dir, f'auc_featuorder_{method}_{N_CLASSES}_classes.tex')
     with open(tabular_path_name, 'wt') as foo:
         foo.write(tabular)
 
 
-def generate_selection_table(method, out_dir='../tables'):
+def generate_selection_table(method, out_dir=TABLES_DIR):
 
     exploration_reports = {}
     selected_features = {}
     for dataset in DATASETS:
-        config_path = f'samplesize{SAMPLE_SIZE}/{dataset}/{n_classes}_classes'
+        config_path = f'samplesize{SAMPLE_SIZE}/{dataset}/{N_CLASSES}_classes'
 
-        exploration_report = load_exploration_report(method, result_dir, config_path, dataset)
+        exploration_report = _load_exploration_report(method, RESULT_DIR, config_path, dataset)
         selected_features[dataset] = exploration_report['selected_features']
         exploration_reports[dataset] = exploration_report
 
@@ -402,11 +476,11 @@ def generate_selection_table(method, out_dir='../tables'):
 
     # add reference value (all features), optimized value, and relative error reduction
 
-    ref_values = [f'{exploration_reports[d]["reference_all_score"]:.3f}' for d in DATASETS]
+    ref_values = [f'{exploration_reports[d]["reference_all_score"]:.3f}$\pm${exploration_reports[d]["reference_all_score_std"]:.3f}'  for d in DATASETS]
     ref_values_str = ' & '.join(ref_values)
     lines.append(r'\multicolumn{2}{c}{All features} & '+ref_values_str+r' \\')
 
-    ref_values = [f'{exploration_reports[d]["final_score"]:.3f}' for d in DATASETS]
+    ref_values = [f'{exploration_reports[d]["final_score"]:.3f}$\pm${exploration_reports[d]["final_score_std"]:.3f}' for d in DATASETS]
     ref_values_str = ' & '.join(ref_values)
     lines.append(r'\multicolumn{2}{c}{Optimized features} & '+ref_values_str+r' \\')
 
@@ -433,14 +507,16 @@ def generate_selection_table(method, out_dir='../tables'):
     latex2pdf(pdf_path_name, delete_tex=True, )
 
 
-
-
 if __name__ == '__main__':
     method = 'EMQ'
     baselines = ['MLPE', 'CC', 'PACC']
     method_names = baselines + [method]
 
-    generate_trends_plots(method_names)
+    # generate_trends_plots(method_names)
+    # generate_err_by_shift_plots(method_names)
     # generate_auc_tables(method=method)
-    generate_selection_table(method=method)
+    # generate_selection_table(method=method)
+    generate_featorder_table(method=method)
+
+
 

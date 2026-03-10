@@ -35,14 +35,22 @@ The options include:
 The idea is to use the pre-computed results for performing the feature block greedy selection (feature_block_selection.py)
 """
 
+def replicable_partition(X, y, classes, n_batches, seed=0):
+    all_data = LabelledCollection(X, y, classes=classes)
+    training_pool, test = all_data.split_stratified(train_prop=8000, random_state=0)
+    batch_size = len(training_pool) // n_batches
+    np.random.seed(seed)
+    random_order = np.random.permutation(len(training_pool))
+    return training_pool, test, batch_size, random_order, classes
 
-def load_data(dataset_dir, dataset_name, n_classes, features, n_batches, seed=0):
-    data = load_dataset(f'{dataset_dir}/{dataset_name}_dataset', n_classes=n_classes, features_blocks=features)
-    classes = np.arange(n_classes)
-
+def load_data(dataset_dir, dataset_name, features, n_batches, seed=0):
+    data = load_dataset(f'{dataset_dir}/{dataset_name}_dataset', n_classes=N_CLASSES, features_blocks=features)
+    classes = np.arange(N_CLASSES)
     X = data.X
     y = data.y
-    # X = PCA(n_components=100).fit_transform(X)
+    prefix_idx = data.prefix_idx
+    training_pool, test, batch_size, random_order, classes = replicable_partition(X, y, classes, n_batches, seed=seed)
+    return training_pool, test, batch_size, random_order, classes, prefix_idx
 
     all_data = LabelledCollection(X, y, classes=classes)
     training_pool, test = all_data.split_stratified(train_prop=8000, random_state=0)
@@ -56,7 +64,6 @@ def load_data(dataset_dir, dataset_name, n_classes, features, n_batches, seed=0)
 
 def experiment_pps_random_split_all_methods(
         dataset_name,
-        n_classes,
         sample_size=SAMPLE_SIZE,
         features='all',
         result_dir='../results/random_split_features',
@@ -68,7 +75,6 @@ def experiment_pps_random_split_all_methods(
             continue
         report, _ = experiment_label_shift(
             dataset_name,
-            n_classes,
             method_name,
             sample_size,
             features,
@@ -79,15 +85,13 @@ def experiment_pps_random_split_all_methods(
     return all_reports
 
 
-def _run_one_seed(
-    run, dataset_dir, dataset_name, n_classes, features, n_batches, method_name, feature_names, sample_size
-):
+def _seeded_run(run, dataset_dir, dataset_name, features, n_batches, method_name, feature_names, sample_size):
     print(f"Running {dataset_name} {method_name} run={run}")
 
     qp.environ['SAMPLE_SIZE'] = sample_size
 
     training_pool, test, batch_size, random_order, classes, blocks_ids = load_data(
-        dataset_dir, dataset_name, n_classes, features, n_batches, seed=run,
+        dataset_dir, dataset_name, features, n_batches, seed=run,
     )
 
     trainsize_reports = []
@@ -127,7 +131,7 @@ def _run_one_seed(
         report["tr_size"] = len(train)
         report["features"] = feature_names
         report["dataset"] = dataset_name
-        report["n_classes"] = n_classes
+        report["n_classes"] = N_CLASSES
         report["run"] = run
         trainsize_reports.append(report)
 
@@ -143,7 +147,6 @@ def _run_one_seed(
 
 def experiment_label_shift(
         dataset_name,
-        n_classes,
         method_name,
         sample_size=SAMPLE_SIZE,
         features='all',
@@ -156,7 +159,7 @@ def experiment_label_shift(
     Main function: fully defines one experiment, involving a (dataset, method, feature setup)
     The experiment simulates label shift, and carries out n_runs repetitions.
     """
-    result_dir = get_full_path(result_dir, dataset_name, n_classes, sample_size)
+    result_dir = get_full_path(result_dir, dataset_name, sample_size)
 
     if isinstance(features, str):
         feature_names = features
@@ -172,8 +175,6 @@ def experiment_label_shift(
         features_short_id = feature_names
 
     # load data
-    n_batches=16
-
     report_path = join(result_dir, f'{method_name}__{features_short_id}.csv')
     print(report_path)
     if os.path.exists(report_path):
@@ -181,8 +182,8 @@ def experiment_label_shift(
     else:
         with threadpool_limits(limits=1):
             all_reports_nested = Parallel(n_jobs=n_runs)(
-                delayed(_run_one_seed)(
-                    run, dataset_dir, dataset_name, n_classes, features, n_batches, method_name, feature_names, sample_size
+                delayed(_seeded_run)(
+                    run, dataset_dir, dataset_name, features, N_BATCHES, method_name, feature_names, sample_size
                 )
                 for run in range(n_runs)
             )
@@ -232,19 +233,6 @@ def show_results_random_split(reports:pd.DataFrame):
         columns=['method', 'features'],
         values='nmd'
     ))
-    print()
-    print('ABSOLUTE ERROR')
-    print(reports.pivot_table(
-        index=['n_classes', 'dataset', 'tr_size'],
-        columns=['method', 'features'],
-        values='ae'
-    ))
-
-
-def prepare_dataset(dataset_name, n_classes, data_dir):
-    path = f'{data_dir}/{dataset_name}_dataset'
-    data = load_dataset(path, n_classes=n_classes)
-    return data
 
 
 if __name__ == '__main__':
@@ -267,15 +255,13 @@ if __name__ == '__main__':
     else:
         raise ValueError('unrecognized --feats, valid args are "all", "groups", and "full"')
 
-    feature_blocks = feature_blocks
+    # feature_blocks = feature_blocks
 
-    n_classes_list = [5]
     dataset_names = ['activity', 'toxicity', 'diversity'] if args.dataset=='all' else [args.dataset]
 
-
     all_reports = []
-    for dataset_name, n_classes, features in product(dataset_names, n_classes_list, feature_blocks):
-        reports = experiment_pps_random_split_all_methods(dataset_name, n_classes, features=features)
+    for dataset_name, features in product(dataset_names, feature_blocks):
+        reports = experiment_pps_random_split_all_methods(dataset_name, features=features)
         all_reports.extend(reports)
 
     show_results_random_split(pd.concat(all_reports))
