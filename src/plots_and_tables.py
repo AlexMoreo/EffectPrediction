@@ -297,7 +297,7 @@ def generate_featorder_table(method, out_dir=f'{TABLES_DIR}/tables'):
                 auc = AUC_from_result_df(df)
                 auc_ave = np.mean(auc)
                 auc_std = np.std(auc)
-                feature_name = feature_name.replace('_', r'\_').replace('--', ': ')
+                feature_name = feature_name.replace('_', r'\_').replace('--', ':')
                 feature_names.append(feature_name)
                 feature_aucs.append(auc_ave)
                 feature_aucs_std.append(auc_std)
