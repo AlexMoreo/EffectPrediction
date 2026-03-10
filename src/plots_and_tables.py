@@ -344,13 +344,13 @@ def generate_featorder_table(method, out_dir=f'{TABLES_DIR}/tables'):
     # First header row: dataset names as multicolumns
     header = [r'\multicolumn{1}{c}{}']  # empty cell for rank column
     for dataset in DATASETS:
-        header.append(r'\multicolumn{2}{c}{\textsc{' + dataset.capitalize() + '}}')
+        header.append(r'\multicolumn{2}{c}{\textsc{' + dataset + '}}')
     lines.append(' & '.join(header) + r' \\')
 
     # Second header row: column names under each dataset
-    subheader = [r'\multicolumn{1}{c}{\textbf{Rank}}']
+    subheader = [r'\multicolumn{1}{c}{\textbf{rank}}']
     for _ in DATASETS:
-        subheader.extend([r'\multicolumn{1}{c}{\textsc{Feature name}}', r'\multicolumn{1}{c}{\textsc{AUC}}'])
+        subheader.extend([r'\multicolumn{1}{c}{feature name}', r'\multicolumn{1}{c}{MNMD}'])
     lines.append(' & '.join(subheader) + r' \\')
 
     lines.append(r'\midrule')
@@ -364,7 +364,7 @@ def generate_featorder_table(method, out_dir=f'{TABLES_DIR}/tables'):
             std = table[dataset]['aucs_std'][i]
             parent = get_parent(name)
             color = parent_colors.get(parent, default_color)
-            colored_name = r'\cellcolor{' + color + '}' + name
+            colored_name = r'\cellcolor{' + color + '}' + r'\texttt{' + name + '}'
             colored_auc = r'\cellcolor{' + color + '}' + f'{auc:.3f}$\pm${std:.3f}'
             row.extend([colored_name, colored_auc])
         lines.append(' & '.join(row) + r' \\')
