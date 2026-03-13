@@ -29,7 +29,7 @@ def load_precomputed_reports(result_dir, feature_blocks, dataset_name, n_classes
         result_file = join(result_dir, f'{method}__{featblock}.csv')
         assert os.path.exists(result_file), f'result file {result_file} does not exist'
         df = pd.read_csv(result_file, index_col=0)
-        auc = AUC_from_result_df(df, logscale=False)
+        auc = AUC_from_result_df(df)
         AUCs.append(auc)
     sorted_feats = sorted(zip(feature_blocks, AUCs), key=lambda x:x[1], reverse=True)
     print(sorted_feats)
@@ -139,7 +139,7 @@ def evaluate_candidates(contributing_features, selection_code, method, dataset_n
         result_dir=result_dir,
         dataset_dir=dataset_dir
     )
-    candidate_score = AUC_from_result_df(eval_report_df, logscale=False)
+    candidate_score = AUC_from_result_df(eval_report_df)
     return candidate_score, report_path
 
 def write_exploration_report(report_path, contributing_features, final_score, all_score, best_path):
