@@ -20,7 +20,7 @@ def relative_feature_importance(best_auc_found, selected_features, featureblocks
         new_candidates.remove(feat_block)
         selection_code = [(1 if f in new_candidates else 0) for f in featureblocks]
 
-        auc, path = evaluate_candidates(new_candidates, selection_code, method, dataset_name, n_classes, exploratory_results_dir, dataset_dir)
+        auc, path = evaluate_candidates(new_candidates, selection_code, method, dataset_name, N_CLASSES, exploratory_results_dir, dataset_dir)
 
         if auc > best_auc_found:
             importance = (auc - best_auc_found)/best_auc_found

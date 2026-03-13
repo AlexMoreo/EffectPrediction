@@ -159,7 +159,7 @@ def experiment_label_shift(
     Main function: fully defines one experiment, involving a (dataset, method, feature setup)
     The experiment simulates label shift, and carries out n_runs repetitions.
     """
-    result_dir = get_full_path(result_dir, dataset_name, sample_size)
+    result_dir = get_full_path(result_dir, dataset_name)
 
     if isinstance(features, str):
         feature_names = features

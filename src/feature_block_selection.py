@@ -145,7 +145,6 @@ def evaluate_candidates(contributing_features, selection_code, method, dataset_n
     features_short_id = ''.join([f'{v}' for v in selection_code])
     eval_report_df, report_path = experiment_label_shift(
         dataset_name,
-        n_classes,
         method,
         sample_size=SAMPLE_SIZE,
         features=contributing_features,
