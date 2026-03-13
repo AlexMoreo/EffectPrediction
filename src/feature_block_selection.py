@@ -1,18 +1,16 @@
 import os
 import argparse
 from os.path import join
-from itertools import product
-from pathlib import Path
 
 import pandas as pd
 import numpy as np
 
 from commons import get_full_path, SAMPLE_SIZE, N_CLASSES
 # from classification import BlockEnsembleClassifier
-from data import load_dataset, FEATURE_SUBGROUP_PREFIXES, FEATURE_HIERARCHY, FEATURE_GROUP_PREFIXES
+from data import FEATURE_SUBGROUP_PREFIXES, FEATURE_HIERARCHY, FEATURE_GROUP_PREFIXES
 from evaluate_feature_blocks import experiment_label_shift
 
-from utils import AUC_from_result_df
+from utils import AUC_from_result_df, load_precomputed_result
 
 pd.set_option('display.max_columns', None)
 pd.set_option('display.width', 1000)
@@ -49,17 +47,6 @@ def inspect_best_departing_configuration(result_dir, dataset_name, n_classes, me
     results = np.asarray(results)
     best_block = reference_block_names[np.argmin(results)]
     return best_block
-
-
-def load_precomputed_result(result_dir, dataset_name, method, feature_block='all'):
-    # returns the AUC for the best feature-block setup (or "ALL" if not indicated). 
-    # This is the reference value we want to beat
-    result_dir = get_full_path(result_dir, dataset_name)
-    result_file = join(result_dir, f'{method}__{feature_block}.csv')
-    assert os.path.exists(result_file), f'result file {result_file} does not exist'
-    df = pd.read_csv(result_file, index_col=0)
-    auc = AUC_from_result_df(df)
-    return auc
 
 
 def greedy_feature_exploration(baseline_score, baseline_features, featblock_scores_sorted, n_rounds=3):

@@ -5,10 +5,9 @@ from itertools import product
 from pathlib import Path
 
 from commons import SAMPLE_SIZE, N_CLASSES
+from utils import _load_exploration_report
 from data import FEATURE_SUBGROUP_PREFIXES
 from feature_block_selection import evaluate_candidates
-from plots_and_tables import _load_exploration_report
-
 
 
 def relative_feature_importance(best_auc_found, selected_features, featureblocks, dataset_dir):
