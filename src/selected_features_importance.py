@@ -3,7 +3,7 @@ import os.path
 from os.path import join
 from itertools import product
 from pathlib import Path
-
+import numpy as np
 from commons import SAMPLE_SIZE, N_CLASSES
 from utils import _load_exploration_report
 from data import FEATURE_SUBGROUP_PREFIXES
@@ -20,6 +20,7 @@ def relative_feature_importance(best_auc_found, selected_features, featureblocks
         selection_code = [(1 if f in new_candidates else 0) for f in featureblocks]
 
         auc, path = evaluate_candidates(new_candidates, selection_code, method, dataset_name, N_CLASSES, exploratory_results_dir, dataset_dir)
+        auc = np.mean(auc)
 
         if auc > best_auc_found:
             importance = (auc - best_auc_found)/best_auc_found
